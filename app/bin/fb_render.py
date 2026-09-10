@@ -337,6 +337,7 @@ class AsciiCanvas:
         self.buf[:] = self._bg
 
     def _px(self, x, y, color):
+        x, y = int(x), int(y)
         if 0 <= x < self.w and 0 <= y < self.h:
             i = (y * self.w + x) * 4
             self.buf[i:i + 4] = bytes((color[2], color[1], color[0], 255))
@@ -349,6 +350,9 @@ class AsciiCanvas:
                 self.buf[i:i + 4] = bytes((color[2], color[1], color[0], 255))
 
     def line(self, x1, y1, x2, y2, color, width=2):
+        # ui_scale 为浮点，坐标与步数必须取整（range 不接受浮点）
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        width = max(1, int(width))
         steps = max(abs(x2 - x1), abs(y2 - y1)) + 1
         for s in range(steps):
             x = x1 + (x2 - x1) * s // steps
