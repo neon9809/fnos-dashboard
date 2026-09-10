@@ -5,7 +5,7 @@
 .fpk = gzip(tar)，外层成员按不区分大小写字母序排列：
   app.tgz（置首）、cmd/**、config/**、ICON.PNG、ICON_256.PNG、manifest、wizard/**
 app.tgz = gzip(tar(app/** + config/** 副本))
-manifest 追加一行 checksum = md5(app.tgz) 供安装器完整性校验。
+manifest 追加一行 checksum = md5(app.tgz) 供安装器完整性校验（值为纯 hex 摘要）。
 """
 
 import glob
@@ -48,7 +48,8 @@ def build_app_tgz(root, mtime):
                     arc = os.path.join(arc_prefix,
                                        os.path.relpath(full, base_dir))
                     add_file(tar, full, arc.replace(os.sep, "/"), mtime)
-    return buf.getvalue()
+    # 安装器要求 app.tgz 是 gzip 压缩的 tar
+    return gzip.compress(buf.getvalue())
 
 
 def main():
@@ -63,7 +64,7 @@ def main():
     # 内层 app.tgz
     app_tgz = build_app_tgz(root, mtime)
     checksum = hashlib.md5(app_tgz).hexdigest()
-    manifest_full = (manifest + "\nchecksum = md5(%s)\n"
+    manifest_full = (manifest + "\nchecksum = %s\n"
                      % checksum).encode("utf-8")
 
     # 收集外层成员

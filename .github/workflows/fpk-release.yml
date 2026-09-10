@@ -109,7 +109,7 @@ jobs:
       - name: 校验 .fpk 结构与完整性
         run: |
           python3 - <<'PY'
-          import hashlib, tarfile
+          import hashlib, io, tarfile
 
           fpk = "${{ steps.build.outputs.fpk }}"
           t = tarfile.open(fpk)
@@ -122,10 +122,12 @@ jobs:
           mf = t.extractfile("manifest").read().decode()
           line = [l for l in mf.splitlines() if "checksum" in l][0]
           expected = line.split("=", 1)[1].strip()
-          actual = "md5(%s)" % hashlib.md5(t.extractfile("app.tgz").read()).hexdigest()
+          app_data = t.extractfile("app.tgz").read()
+          assert app_data[:2] == b"\x1f\x8b", "app.tgz 必须是 gzip 压缩流"
+          actual = hashlib.md5(app_data).hexdigest()
           assert expected == actual, "checksum 不一致: %s vs %s" % (expected, actual)
 
-          inner = tarfile.open(fileobj=t.extractfile("app.tgz"))
+          inner = tarfile.open(fileobj=io.BytesIO(app_data), mode="r:gz")
           inner_names = inner.getnames()
           for must in ("app/bin/dashboard.py", "app/bin/fb_render.py",
                        "app/bin/neon_crypto.py", "app/ui/config",
