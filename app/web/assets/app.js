@@ -24,7 +24,7 @@ var sparkDirty = false;
 
 /* ---------------- API ---------------- */
 function poll() {
-  fetch("/api/status").then(function (r) {
+  fetch("api/status").then(function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
   }).then(function (data) {

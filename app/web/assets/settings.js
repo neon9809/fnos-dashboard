@@ -198,7 +198,7 @@ function renderIndexCheckboxes() {
 function renderExtModules() {
   var wrap = document.getElementById("ext-list");
   wrap.textContent = "";
-  api("GET", "/api/ext/modules").then(function (data) {
+  api("GET", "api/ext/modules").then(function (data) {
     var list = data.modules || [];
     if (!list.length) {
       var empty = document.createElement("p");
@@ -297,7 +297,7 @@ function renderExtModules() {
       del.textContent = "卸载";
       del.addEventListener("click", function () {
         if (!confirm("卸载模组 " + m.id + "？")) return;
-        api("POST", "/api/ext/uninstall", { id: m.id }).then(function () {
+        api("POST", "api/ext/uninstall", { id: m.id }).then(function () {
           toast("已卸载 " + m.id, true);
           renderExtModules();
         }).catch(function (e) { toast("卸载失败：" + e.message, false); });
@@ -317,7 +317,7 @@ function renderExtModules() {
 function installExt(bytes, filename) {
   return riskConfirm().then(function (yes) {
     if (!yes) return null;
-    return api("POST", "/api/ext/install?filename=" + encodeURIComponent(filename),
+    return api("POST", "api/ext/install?filename=" + encodeURIComponent(filename),
                bytes, true)
       .then(function (r) {
         var v = (r.manifest || {})._verify || {};
@@ -330,7 +330,7 @@ function installExt(bytes, filename) {
 function renderKeys() {
   var wrap = document.getElementById("key-list");
   wrap.textContent = "";
-  api("GET", "/api/ext/keys").then(function (data) {
+  api("GET", "api/ext/keys").then(function (data) {
     var keys = data.keys || [];
     if (!keys.length) {
       var p = document.createElement("p");
@@ -350,7 +350,7 @@ function renderKeys() {
       del.className = "btn-mini";
       del.textContent = "移除";
       del.addEventListener("click", function () {
-        api("DELETE", "/api/ext/keys", { key_id: k.key_id })
+        api("DELETE", "api/ext/keys", { key_id: k.key_id })
           .then(renderKeys)
           .catch(function (e) { toast("移除失败：" + e.message, false); });
       });
@@ -369,7 +369,7 @@ function save() {
   btn.disabled = true;
   st.className = "";
   st.textContent = "保存中…";
-  api("POST", "/api/settings", {
+  api("POST", "api/settings", {
     theme: state.theme,
     accent: state.accent,
     refresh: state.refresh,
@@ -405,7 +405,7 @@ function save() {
 function refreshPreview() {
   var img = document.getElementById("fb-preview");
   var ph = document.getElementById("preview-placeholder");
-  img.src = "/api/fb/dump.png?t=" + Date.now();
+  img.src = "api/fb/dump.png?t=" + Date.now();
   img.onload = function () { ph.classList.add("hidden"); img.classList.remove("hidden"); };
   img.onerror = function () { img.classList.add("hidden"); ph.classList.remove("hidden"); };
 }
@@ -485,7 +485,7 @@ function bindUI() {
     var name = document.getElementById("key-name").value.trim();
     var pub = document.getElementById("key-public").value.trim();
     if (!pub) { toast("请粘贴公钥", false); return; }
-    api("POST", "/api/ext/keys", { name: name, public_key: pub })
+    api("POST", "api/ext/keys", { name: name, public_key: pub })
       .then(function () {
         toast("信任密钥已添加", true);
         document.getElementById("key-name").value = "";
@@ -500,7 +500,7 @@ function bindUI() {
 }
 
 function boot() {
-  api("GET", "/api/config").then(function (data) {
+  api("GET", "api/config").then(function (data) {
     state = JSON.parse(JSON.stringify(data.config));
     renderThemes();
     renderSwatches();
@@ -518,7 +518,7 @@ function boot() {
     toast("配置加载失败：" + e.message, false);
   });
 
-  api("GET", "/api/fb/info").then(function (data) {
+  api("GET", "api/fb/info").then(function (data) {
     renderFbInfo(data.fb);
   });
 

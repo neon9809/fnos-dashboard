@@ -3,10 +3,10 @@
         "com.fnos.dashboard.main": {
             "title": "状态监视",
             "icon": "images/icon-{0}.png",
-            "type": "url",
+            "type": "iframe",
             "protocol": "http",
             "port": "8199",
-            "url": "/",
+            "url": "/settings",
             "allUsers": true
         }
     }

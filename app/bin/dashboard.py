@@ -18,6 +18,7 @@ import re
 import shutil
 import signal
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -1187,6 +1188,14 @@ class ExtModules:
 # --------------------------------------------------------------------------
 # HTTP 服务
 # --------------------------------------------------------------------------
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 MIME = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -1251,8 +1260,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _deny_local_only(self):
         self._send_json(403, {"ok": False,
-                              "error": "设置页与管理接口仅限 127.0.0.1 访问"
-                                       "（请在 NAS 本机浏览器打开）"})
+                              "error": "设置页与管理接口仅限本机访问"
+                                       "（请通过飞牛桌面应用入口访问）"})
 
     def _read_body(self, limit=8 * 1024 * 1024):
         try:
@@ -1300,6 +1309,48 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, body, ctype=ctype)
 
     # ---- framebuffer 信息与预览 ----
+    def _fb_restart(self):
+        """设置变更后重启显示器渲染进程（启用时拉起，关闭时仅清理）。"""
+        pid_file = os.path.join(self.var_dir, "fb.pid")
+        try:
+            with open(pid_file) as f:
+                old = int(f.read().strip())
+            os.kill(old, signal.SIGTERM)
+            for _ in range(15):
+                if not _pid_alive(old):
+                    break
+                time.sleep(0.1)
+            if _pid_alive(old):
+                os.kill(old, signal.SIGKILL)
+        except (OSError, ValueError):
+            pass
+        try:
+            os.unlink(pid_file)
+        except OSError:
+            pass
+
+        cfg = self.config.get()
+        if not cfg.get("fb_enabled") or not os.path.exists("/dev/fb0"):
+            return
+        fb_bin = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "fb_render.py")
+        if not os.path.isfile(fb_bin):
+            return
+        port = self.server.server_address[1]
+        log_path = os.path.join(self.var_dir, "fb.log")
+        try:
+            log = open(log_path, "ab")
+            proc = subprocess.Popen(
+                [sys.executable, fb_bin, "--fb", "/dev/fb0",
+                 "--api", "http://127.0.0.1:%d" % port],
+                stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                start_new_session=True)
+            log.close()
+        except OSError:
+            return
+        with open(pid_file, "w") as f:
+            f.write(str(proc.pid))
+
     def _fb_info(self):
         base = "/sys/class/graphics/fb0"
         info = {"exists": os.path.exists("/dev/fb0"), "w": 0, "h": 0,
@@ -1449,6 +1500,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             ok, err = self.config.update(patch)
             if ok:
+                # 显示器相关设置变更后立即重启渲染进程，无需重启应用
+                if {"fb_enabled", "fb_rotate", "screen_inches",
+                    "rotate_seconds"} & set(patch):
+                    self._fb_restart()
                 self._send_json(200, {"ok": True, "config": self.config.get()})
             else:
                 self._send_json(400, {"ok": False, "error": err})
