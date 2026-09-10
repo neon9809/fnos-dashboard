@@ -4,7 +4,7 @@
 
 .fpk = gzip(tar)，外层成员按不区分大小写字母序排列：
   app.tgz（置首）、cmd/**、config/**、ICON.PNG、ICON_256.PNG、manifest、wizard/**
-app.tgz = gzip(tar(app/** + config/** 副本))
+app.tgz = gzip(tar(app/** + config/** 副本))，条目相对 app 根目录（不带 app/ 前缀）
 manifest 追加一行 checksum = md5(app.tgz) 供安装器完整性校验（值为纯 hex 摘要）。
 """
 
@@ -38,13 +38,13 @@ def add_file(tar, path, arcname, mtime, executable=False):
 def build_app_tgz(root, mtime):
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
-        for base, arc_prefix in (("app", "app"), ("config", "config")):
+        # app.tgz 条目相对 app 根目录（无 app/ 前缀），config/ 副本按官方格式保留
+        for base, arc_prefix in (("app", ""), ("config", "config")):
             base_dir = os.path.join(root, base)
             for dirpath, dirnames, filenames in os.walk(base_dir):
                 dirnames.sort()
                 for fn in sorted(filenames):
                     full = os.path.join(dirpath, fn)
-                    rel = os.path.relpath(full, root)
                     arc = os.path.join(arc_prefix,
                                        os.path.relpath(full, base_dir))
                     add_file(tar, full, arc.replace(os.sep, "/"), mtime)
