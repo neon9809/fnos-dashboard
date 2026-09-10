@@ -1,0 +1,17 @@
+#!/bin/bash
+# 卸载后：清理应用进程残留
+APP_NAME="${TRIM_APPNAME:-com.fnos.dashboard}"
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
+PID_FILE="${VAR_DIR}/app.pid"
+
+if [ -f "$PID_FILE" ]; then
+    pid=$(cat "$PID_FILE" | tr -d '[:space:]')
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null
+    fi
+    rm -f "$PID_FILE"
+fi
+
+# 移除显示器模式使用的 udev 规则
+rm -f /etc/udev/rules.d/99-fnos-dashboard-fb.rules 2>/dev/null
+exit 0

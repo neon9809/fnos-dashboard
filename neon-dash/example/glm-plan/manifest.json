@@ -1,0 +1,21 @@
+{
+  "id": "glm-plan",
+  "name": "GLM Coding Plan 用量",
+  "version": "1.0.0",
+  "author": "neon",
+  "desc": "智谱 GLM Coding Plan 用量监控：5 小时 / 周窗口、MCP·联网工具月额度、套餐档位与重置时间",
+  "entry": "mod.py",
+  "config_schema": [
+    { "field": "api_key", "type": "password", "label": "API Key（bigmodel.cn）", "default": "" },
+    {
+      "field": "region",
+      "type": "select",
+      "label": "站点",
+      "default": "cn",
+      "options": [
+        { "value": "cn", "label": "国内 open.bigmodel.cn" },
+        { "value": "intl", "label": "国际 api.z.ai" }
+      ]
+    }
+  ]
+}

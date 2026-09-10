@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>状态监视 · 设置</title>
+<link rel="stylesheet" href="assets/settings.css">
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ============ 左侧：配置区域 ============ -->
+  <aside class="pane-left">
+    <header class="pane-head">
+      <img src="images/icon-64.png" alt="">
+      <div>
+        <h1>状态监视 · 设置</h1>
+        <span class="sub">仅限 127.0.0.1 访问的管理页面</span>
+      </div>
+      <a class="back" href="/">← 返回面板</a>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="theme" class="active">主题</button>
+      <button data-tab="display">显示</button>
+      <button data-tab="fb">显示器</button>
+      <button data-tab="mods">模组</button>
+    </nav>
+
+    <div class="tab-body">
+
+      <!-- ===== 主题 ===== -->
+      <section id="tab-theme" class="tab active">
+        <h3>内置主题</h3>
+        <div class="theme-grid" id="theme-grid"></div>
+        <h3>强调色</h3>
+        <div class="accent-block">
+          <div class="accent-swatches" id="accent-swatches"></div>
+          <div class="accent-actions">
+            <label class="custom-color">自定义 <input type="color" id="accent-picker" value="#3b82f6"></label>
+            <button id="accent-reset" class="btn-mini">跟随主题</button>
+          </div>
+        </div>
+        <h3>温度单位</h3>
+        <label class="field">显示温度
+          <select id="set-temp-unit">
+            <option value="C">摄氏度 ℃</option>
+            <option value="F">华氏度 ℉</option>
+          </select>
+        </label>
+      </section>
+
+      <!-- ===== 显示 ===== -->
+      <section id="tab-display" class="tab">
+        <h3>面板卡片</h3>
+        <div id="card-toggles" class="toggles"></div>
+        <h3>刷新与轮换</h3>
+        <label class="field">面板刷新频次
+          <select id="set-refresh">
+            <option value="1">1 秒</option>
+            <option value="2">2 秒</option>
+            <option value="3">3 秒</option>
+            <option value="5">5 秒</option>
+            <option value="10">10 秒</option>
+          </select>
+        </label>
+        <label class="field">页面轮换时间
+          <select id="set-rotate">
+            <option value="10">10 秒</option>
+            <option value="15">15 秒</option>
+            <option value="30">30 秒</option>
+            <option value="60">60 秒</option>
+            <option value="120">2 分钟</option>
+          </select>
+        </label>
+        <h3>显示方向</h3>
+        <div class="seg" id="seg-rotate">
+          <button data-v="0" class="active">0°</button>
+          <button data-v="90">90°</button>
+          <button data-v="180">180°</button>
+          <button data-v="270">270°</button>
+        </div>
+        <p class="hint">旋转作用于显示器画面（例如屏幕竖装时选 90° 或 270°）。</p>
+      </section>
+
+      <!-- ===== 显示器 ===== -->
+      <section id="tab-fb" class="tab">
+        <h3>帧缓冲输出</h3>
+        <div class="toggle-row big"><span>启用显示器显示</span><input type="checkbox" id="set-fb"></div>
+        <div id="fb-info" class="fb-info">读取中…</div>
+        <label class="field">屏幕尺寸（英寸）
+          <select id="set-inches">
+            <option value="0">自动（按分辨率缩放）</option>
+            <option value="7">7"</option>
+            <option value="10.1">10.1"</option>
+            <option value="13.3">13.3"</option>
+            <option value="15.6">15.6"</option>
+            <option value="21.5">21.5"</option>
+          </select>
+        </label>
+        <p class="hint">设置尺寸后按 PPI 修正字体缩放；留空则按分辨率自适应。中文渲染需安装 python3-PIL。</p>
+      </section>
+
+      <!-- ===== 模组 ===== -->
+      <section id="tab-mods" class="tab">
+        <h3>内置模组</h3>
+        <div class="mod-row">
+          <div class="toggle-row"><span>日历</span><input type="checkbox" id="mod-calendar"></div>
+        </div>
+        <details class="mod-detail" id="detail-weather">
+          <summary><label class="toggle-row inline"><span>天气预报</span><input type="checkbox" id="mod-weather"></label></summary>
+          <label class="field">数据源
+            <select id="set-wprovider">
+              <option value="open-meteo">Open-Meteo（免密钥）</option>
+              <option value="qweather">和风天气</option>
+            </select>
+          </label>
+          <label class="field">城市
+            <input type="text" id="set-city" class="text-input" placeholder="如：北京">
+          </label>
+          <div id="qweather-fields">
+            <label class="field">API Host
+              <input type="text" id="set-qhost" class="text-input" placeholder="devapi.qweather.com 或你的专用 Host">
+            </label>
+            <label class="field">API Key
+              <input type="password" id="set-qkey" class="text-input" placeholder="和风控制台获取">
+            </label>
+            <label class="field">位置（可选）
+              <input type="text" id="set-wloc" class="text-input" placeholder="经度,纬度 / LocationID / 城市名">
+            </label>
+            <div class="field">生活指数
+              <div class="idx-grid" id="idx-checkboxes"></div>
+            </div>
+            <p class="hint">指数类型见和风文档；「花粉过敏指数」为 7，等级 1 极不易发 → 5 极易发。</p>
+          </div>
+        </details>
+
+        <h3>扩展模组（.neon-dash）</h3>
+        <div class="mod-actions">
+          <label class="btn-mini file-btn">安装 .neon-dash 包<input type="file" id="file-ext" accept=".neon-dash" hidden></label>
+        </div>
+        <div id="ext-list" class="ext-list"></div>
+
+        <details class="adv">
+          <summary>信任的签名密钥</summary>
+          <div id="key-list" class="key-list"></div>
+          <label class="field">备注<input type="text" id="key-name" class="text-input" placeholder="开发者名称"></label>
+          <label class="field">公钥（ed25519 raw base64）<textarea id="key-public" class="text-input" rows="2" placeholder="base64…"></textarea></label>
+          <button id="btn-key-add" class="btn-mini">添加信任密钥</button>
+        </details>
+      </section>
+
+    </div>
+
+    <footer class="pane-foot">
+      <span id="save-state"></span>
+      <button id="btn-save" class="btn-save">保存并同步到显示屏</button>
+    </footer>
+  </aside>
+
+  <!-- ============ 右侧：效果预览 ============ -->
+  <main class="pane-right">
+    <div class="preview-head">
+      <h2>显示屏实时预览</h2>
+      <label><input type="checkbox" id="preview-auto" checked> 自动刷新（3s）</label>
+      <button id="preview-refresh" class="btn-mini">立即刷新</button>
+    </div>
+    <div class="preview-stage" id="preview-stage">
+      <img id="fb-preview" alt="显示屏预览">
+      <div id="preview-placeholder" class="preview-placeholder hidden">
+        显示器未启用或不可读。<br>开启「显示器 → 启用显示器显示」并保存后可预览。
+      </div>
+    </div>
+    <p class="hint center">预览内容 = 显示器实际画面（含旋转方向）。保存后约 2 秒内生效。</p>
+  </main>
+
+</div>
+
+<!-- ============ 风险告知弹窗 ============ -->
+<div class="modal-mask hidden" id="risk-mask">
+  <div class="modal">
+    <h3>⚠ 启用第三方模组风险告知</h3>
+    <ol>
+      <li>模组包含第三方开发者编写的<b>可执行代码</b>，启用后将在本机（NAS）以后端进程身份运行，可能访问系统资源与网络，请<b>自行甄别开发者与代码来源的风险</b>。</li>
+      <li>请<b>谨慎向模组提交个人关键凭证、密钥、密码</b>等敏感信息——模组作者可在其代码中读取这些配置。</li>
+      <li>仅安装可信来源的 .neon-dash 包，优先选择「✓ 已验证」签名且签名者在信任列表中的模组。</li>
+    </ol>
+    <div class="modal-actions">
+      <button id="risk-cancel" class="btn-mini">取消</button>
+      <button id="risk-ok" class="btn-save">我已知晓风险并继续</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="assets/settings.js"></script>
+</body>
+</html>

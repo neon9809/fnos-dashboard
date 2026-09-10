@@ -1,0 +1,35 @@
+#!/bin/bash
+# 更新后：确保配置文件存在（用户配置在升级时由系统经 etc 保留）
+APP_NAME="${TRIM_APPNAME:-com.fnos.dashboard}"
+ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
+CFG_FILE="${ETC_DIR}/config.json"
+
+mkdir -p "$ETC_DIR" "$VAR_DIR"
+
+if [ ! -f "$CFG_FILE" ]; then
+    python3 - "$CFG_FILE" <<'PY'
+import json, os, sys
+
+path = sys.argv[1]
+cfg = {
+    "theme": "midnight",
+    "accent": "",
+    "refresh": 2,
+    "temp_unit": "C",
+    "cards": {
+        "cpu": True, "memory": True, "disk": True,
+        "network": True, "temperature": True, "info": True,
+    },
+    "saved_at": 0,
+}
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, ensure_ascii=False, indent=2)
+PY
+fi
+
+if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-${TRIM_USERNAME}}" "$ETC_DIR" 2>/dev/null
+fi
+exit 0

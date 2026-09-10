@@ -1,0 +1,17 @@
+{
+  "name": "fpk-sandbox",
+  "version": "1.0.0",
+  "description": "飞牛 fnOS 应用沙箱配置 CLI：生成、校验并打包 Docker 应用的 .fpk 安装包（零依赖）",
+  "license": "MIT",
+  "bin": {
+    "fpksb": "bin/fpksb.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "bash test/run.sh",
+    "link": "chmod +x bin/fpksb.js && ln -sf \"$(pwd)/bin/fpksb.js\" /usr/local/bin/fpksb"
+  },
+  "keywords": ["fnos", "fnnas", "fpk", "fnpack", "sandbox", "docker"]
+}

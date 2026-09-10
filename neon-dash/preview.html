@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>neon-dash 模组预览器</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --bg:#0e1116; --pane:#151a22; --pane2:#1a2029; --brd:rgba(255,255,255,.09);
+        --text:#e7eaf0; --dim:#9aa3b2; --accent:#3b82f6; --ok:#34d399; --danger:#f87171; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg); color:var(--text); }
+.layout { display:flex; min-height:100vh; }
+.pane-left { width:430px; min-width:380px; background:var(--pane); border-right:1px solid var(--brd);
+             display:flex; flex-direction:column; height:100vh; position:sticky; top:0; }
+.pane-head { padding:14px 18px; border-bottom:1px solid var(--brd); }
+.pane-head h1 { font-size:16px; }
+.pane-head .sub { font-size:11.5px; color:var(--dim); }
+.pane-body { flex:1; overflow-y:auto; padding:14px 18px; }
+.pane-body h3 { font-size:11.5px; color:var(--dim); letter-spacing:1px; margin:16px 0 8px; font-weight:600; }
+.field { display:flex; align-items:center; justify-content:space-between; font-size:13px; margin-bottom:10px; gap:10px; }
+select, .code-input { background:var(--pane2); color:var(--text); border:1px solid var(--brd);
+                      border-radius:8px; padding:6px 10px; font-size:13px; }
+.code-input { flex:1; min-width:0; width:100%; font-family:ui-monospace,Menlo,monospace; font-size:12px;
+              line-height:1.55; resize:vertical; }
+textarea.payload { height:250px; }
+textarea.editor { height:360px; }
+textarea.config { height:52px; }
+.seg { display:flex; gap:8px; }
+.seg button { flex:1; padding:8px 0; border-radius:10px; cursor:pointer; background:var(--pane2);
+              border:1px solid var(--brd); color:var(--dim); font-size:13px; }
+.seg button.active { border-color:var(--accent); color:var(--text); background:rgba(59,130,246,.12); }
+.hint { font-size:11.5px; color:var(--dim); line-height:1.6; margin-top:6px; }
+.pane-right { flex:1; display:flex; flex-direction:column; align-items:center; padding:24px; gap:14px; overflow-y:auto; }
+.stage { width:100%; max-width:960px; aspect-ratio:16/10; background:#000; border-radius:14px;
+         border:1px solid var(--brd); display:flex; align-items:center; justify-content:center;
+         overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.4); }
+.stage img { width:100%; height:100%; object-fit:contain; }
+.stage.portrait { aspect-ratio:10/16; max-width:600px; }
+.meta { width:100%; max-width:960px; }
+.meta h4 { font-size:12px; color:var(--dim); margin-bottom:6px; }
+.payload-out { background:var(--pane); border:1px solid var(--brd); border-radius:10px; padding:10px 12px;
+               font-family:ui-monospace,Menlo,monospace; font-size:11.5px; white-space:pre-wrap;
+               max-height:180px; overflow:auto; line-height:1.5; }
+.payload-out.err { color:var(--danger); border-color:var(--danger); }
+.status { font-size:12px; color:var(--dim); }
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <aside class="pane-left">
+    <div class="pane-head">
+      <h1>neon-dash 模组预览器</h1>
+      <div class="sub">与显示器（fb_render）同一渲染代码 · 所见即实机</div>
+    </div>
+    <div class="pane-body">
+      <h3>页面</h3>
+      <label class="field">目标页面
+        <select id="page">
+          <option value="custom" selected>自定义模组</option>
+          <option value="system">系统状态（演示数据）</option>
+          <option value="calendar">日历</option>
+          <option value="weather">天气预报</option>
+          <option value="coding">Coding Plan</option>
+        </select>
+      </label>
+      <label class="field">渲染模式
+        <select id="mode">
+          <option value="payload" selected>Payload JSON</option>
+          <option value="code">mod.py 代码</option>
+        </select>
+      </label>
+
+      <div id="sec-payload">
+        <h3>Payload JSON</h3>
+        <textarea id="payload" class="code-input payload" spellcheck="false"></textarea>
+      </div>
+
+      <div id="sec-code" class="hidden">
+        <h3>get_payload 代码</h3>
+        <textarea id="code" class="code-input editor" spellcheck="false"></textarea>
+        <h3>config（JSON）</h3>
+        <textarea id="modconfig" class="code-input config" spellcheck="false">{}</textarea>
+      </div>
+
+      <h3>显示设置</h3>
+      <label class="field">主题
+        <select id="theme">
+          <option value="midnight" selected>午夜蓝</option>
+          <option value="graphite">石墨黑</option>
+          <option value="emerald">翡翠绿</option>
+          <option value="solar">日光橙</option>
+          <option value="sakura">樱粉</option>
+          <option value="light">云白</option>
+        </select>
+      </label>
+      <div class="field">显示方向
+        <div class="seg" id="rotate-seg">
+          <button data-v="0" class="active">0°</button>
+          <button data-v="90">90°</button>
+          <button data-v="180">180°</button>
+          <button data-v="270">270°</button>
+        </div>
+      </div>
+      <label class="field">屏幕尺寸（英寸）
+        <select id="inches">
+          <option value="0" selected>自动（分辨率）</option>
+          <option value="7">7"</option>
+          <option value="10.1">10.1"</option>
+          <option value="13.3">13.3"</option>
+          <option value="15.6">15.6"</option>
+          <option value="21.5">21.5"</option>
+        </select>
+      </label>
+      <p class="hint">编辑内容约 0.6 秒后自动重新渲染。旋转 90°/270° 时按竖版布局渲染后转置，与实机一致。</p>
+    </div>
+  </aside>
+
+  <main class="pane-right">
+    <div class="stage" id="stage"><img id="preview" alt="渲染预览"></div>
+    <div class="meta">
+      <h4>get_payload 输出 / 状态</h4>
+      <div id="payload-out" class="payload-out">–</div>
+    </div>
+    <div class="status" id="status">就绪</div>
+  </main>
+
+</div>
+
+<script>
+"use strict";
+var PAGE_DEFAULT_PAYLOAD = {
+  custom: null,   // 启动时填充
+  weather: null,
+  coding: null
+};
+var pagePayloads = {};   // 各页当前编辑中的 payload
+var DEMO_WEATHER_JSON = {
+  provider: "qweather", city: "北京",
+  hourly: [
+    { time: "14:00", temp: 26, text: "晴", humidity: 40, pop: 0 },
+    { time: "15:00", temp: 27, text: "多云", humidity: 42, pop: 0 },
+    { time: "16:00", temp: 27, text: "多云", humidity: 45, pop: 10 }
+  ],
+  indices: [
+    { type: "7", name: "花粉过敏指数", level: "3", category: "较易发",
+      text: "天气条件易诱发过敏，易过敏人群应减少外出。" },
+    { type: "5", name: "紫外线指数", level: "3", category: "中等", text: "" }
+  ],
+  error: ""
+};
+var DEMO_CODING_JSON = {
+  name: "GLM Coding Plan", ok: true, used: 123.4, total: 500,
+  reset: "2026-10-01", error: ""
+};
+
+var $ = function (id) { return document.getElementById(id); };
+var renderTimer = null;
+
+function currentReq() {
+  var req = {
+    page: $("page").value,
+    theme: $("theme").value,
+    rotate: parseInt(document.querySelector("#rotate-seg button.active").dataset.v, 10),
+    inches: parseFloat($("inches").value) || 0
+  };
+  var mode = $("mode").value;
+  if (req.page === "custom" || req.page === "weather" || req.page === "coding") {
+    if (mode === "code") {
+      req.code = $("code").value;
+      try { req.config = JSON.parse($("modconfig").value || "{}"); }
+      catch (e) { req.config = {}; }
+    } else {
+      try { req.payload = JSON.parse($("payload").value || "{}"); }
+      catch (e) { /* JSON 错误时保留上次画面 */ return req; }
+    }
+  }
+  return req;
+}
+
+function doRender() {
+  var req = currentReq();
+  var needPayload = (req.page === "custom" || req.page === "weather" || req.page === "coding")
+                    && $("mode").value === "payload";
+  if (needPayload) {
+    try { JSON.parse($("payload").value || "{}"); }
+    catch (e) {
+      $("status").textContent = "payload JSON 语法错误：" + e.message;
+      return;
+    }
+  }
+  $("status").textContent = "渲染中…";
+  fetch("/api/render", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req)
+  }).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j.ok) { $("status").textContent = "失败：" + j.error; return; }
+    $("preview").src = "data:image/png;base64," + j.png;
+    var out = $("payload-out");
+    if (j.error) {
+      out.textContent = "get_payload 错误：\n" + j.error;
+      out.className = "payload-out err";
+    } else if (j.payload) {
+      out.textContent = JSON.stringify(j.payload, null, 2);
+      out.className = "payload-out";
+    } else {
+      out.textContent = "（该页面由内置渲染器生成，无 payload）";
+      out.className = "payload-out";
+    }
+    $("status").textContent = "渲染完成 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  }).catch(function (e) {
+    $("status").textContent = "请求失败：" + e.message;
+  });
+}
+
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(doRender, 600);
+}
+
+function syncMode() {
+  var mode = $("mode").value;
+  var editable = $("page").value === "custom" || $("page").value === "weather" || $("page").value === "coding";
+  $("sec-payload").classList.toggle("hidden", mode !== "payload" || !editable);
+  $("sec-code").classList.toggle("hidden", mode !== "code");
+  $("status").textContent = editable ? "就绪" : "该页面为内置渲染（切换到自定义模组可编辑）";
+}
+
+function syncStage() {
+  var rot = parseInt(document.querySelector("#rotate-seg button.active").dataset.v, 10);
+  $("stage").classList.toggle("portrait", rot === 90 || rot === 270);
+}
+
+function boot() {
+  PAGE_DEFAULT_PAYLOAD.custom = {
+    title: "示例模组", subtitle: "由 .neon-dash 包提供",
+    lines: [["包 ID", "mock"], ["版本", "1.0.0"], ["自定义计数", "3"], ["当前时间", "12:00:00"]],
+    bars: [["模拟负载", 42], ["示例进度", 76]],
+    text: "编辑左侧 payload，右侧实时渲染"
+  };
+  PAGE_DEFAULT_PAYLOAD.weather = DEMO_WEATHER_JSON;   // 天气页内置演示数据
+  PAGE_DEFAULT_PAYLOAD.coding = DEMO_CODING_JSON;
+
+  $("payload").value = JSON.stringify(PAGE_DEFAULT_PAYLOAD.custom, null, 2);
+  $("code").value = DEFAULT_CODE_PLACEHOLDER;
+  $("mode").addEventListener("change", function () { syncMode(); doRender(); });
+  $("page").addEventListener("change", function () {
+    var p = this.value;
+    if ((p === "custom" || p === "weather" || p === "coding")
+        && $("mode").value === "payload") {
+      if (!pagePayloads[p]) {
+        pagePayloads[p] = p === "custom" ? PAGE_DEFAULT_PAYLOAD.custom
+          : p === "weather" ? DEMO_WEATHER_JSON : DEMO_CODING_JSON;
+      }
+      $("payload").value = JSON.stringify(pagePayloads[p], null, 2);
+    }
+    syncMode();
+    doRender();
+  });
+  ["payload", "code", "modconfig"].forEach(function (id) {
+    $(id).addEventListener("input", function () {
+      var p = $("page").value;
+      if (id === "payload" && (p === "custom" || p === "weather" || p === "coding")) {
+        try { pagePayloads[p] = JSON.parse($("payload").value); } catch (e) { /* 打错字时不覆盖 */ }
+      }
+      scheduleRender();
+    });
+  });
+  syncMode();
+  syncStage();
+  doRender();
+}
+
+var DEFAULT_CODE_PLACEHOLDER = '"""自定义模组：实现 get_payload(config) 即可，详见 MODULE_SPEC.md"""\nimport time\n\n\ndef get_payload(config: dict) -> dict:\n    return {\n        "title": "我的模组",\n        "subtitle": "get_payload 返回的数据决定页面内容",\n        "lines": [\n            ["示例键", "示例值"],\n            ["配置项", str(config.get("count", "-"))],\n            ["当前时间", time.strftime("%H:%M:%S")],\n        ],\n        "bars": [["进度", 60]],\n        "text": "保存后自动渲染，与实机完全一致",\n    }\n';
+
+boot();
+</script>
+</body>
+</html>

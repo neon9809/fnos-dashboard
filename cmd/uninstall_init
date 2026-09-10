@@ -1,0 +1,3 @@
+#!/bin/bash
+# 卸载前：无特殊处理（var 与 shares 由系统保留）
+exit 0

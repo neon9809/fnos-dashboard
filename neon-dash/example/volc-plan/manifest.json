@@ -1,0 +1,23 @@
+{
+  "id": "volc-plan",
+  "name": "火山方舟 Plan 用量",
+  "version": "1.0.0",
+  "author": "neon",
+  "desc": "火山方舟 Coding Plan / Agent Plan 用量监控：5 小时 / 本周 / 本月额度窗口与重置时间（OpenAPI 签名查询）",
+  "entry": "mod.py",
+  "config_schema": [
+    {
+      "field": "plan_type",
+      "type": "select",
+      "label": "Plan 类型",
+      "default": "coding",
+      "options": [
+        { "value": "coding", "label": "Coding Plan" },
+        { "value": "agent", "label": "Agent Plan" }
+      ]
+    },
+    { "field": "access_key", "type": "text", "label": "AccessKey ID", "default": "" },
+    { "field": "secret_key", "type": "password", "label": "Secret Access Key", "default": "" },
+    { "field": "region", "type": "text", "label": "Region", "default": "cn-beijing" }
+  ]
+}

@@ -1,0 +1,62 @@
+[
+    {
+        "stepTitle": "显示设置",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "修改面板与显示器的全局默认显示。保存后生效；浏览器端个人设置可在面板右上角「设置」（仅限 NAS 本机）中单独调整。"
+            },
+            {
+                "type": "select",
+                "field": "theme",
+                "label": "显示主题",
+                "options": [
+                    { "label": "午夜蓝（默认）", "value": "midnight" },
+                    { "label": "石墨黑", "value": "graphite" },
+                    { "label": "翡翠绿", "value": "emerald" },
+                    { "label": "日光橙", "value": "solar" },
+                    { "label": "樱粉（浅色）", "value": "sakura" },
+                    { "label": "云白（浅色）", "value": "light" }
+                ],
+                "initValue": "midnight"
+            },
+            {
+                "type": "select",
+                "field": "refresh",
+                "label": "面板刷新间隔",
+                "options": [
+                    { "label": "1 秒", "value": "1" },
+                    { "label": "2 秒", "value": "2" },
+                    { "label": "3 秒", "value": "3" },
+                    { "label": "5 秒", "value": "5" },
+                    { "label": "10 秒", "value": "10" }
+                ],
+                "initValue": "2"
+            },
+            {
+                "type": "select",
+                "field": "rotate_seconds",
+                "label": "显示器页面轮换间隔",
+                "options": [
+                    { "label": "10 秒", "value": "10" },
+                    { "label": "15 秒", "value": "15" },
+                    { "label": "30 秒", "value": "30" },
+                    { "label": "60 秒", "value": "60" }
+                ],
+                "initValue": "15"
+            },
+            {
+                "type": "switch",
+                "field": "celsius",
+                "label": "温度使用摄氏度（关闭后为华氏度）",
+                "initValue": "true"
+            },
+            {
+                "type": "switch",
+                "field": "fb_enabled",
+                "label": "启用显示器输出（/dev/fb0）",
+                "initValue": "true"
+            }
+        ]
+    }
+]

@@ -1,0 +1,6 @@
+dist/
+__pycache__/
+*.pyc
+.DS_Store
+lcdsimple/
+fnos-fpk-dev/

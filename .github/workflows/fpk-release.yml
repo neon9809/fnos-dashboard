@@ -1,0 +1,155 @@
+name: FPK Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APPNAME: com.fnos.dashboard
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build_fpk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装 Pillow（图标渲染 + 冒烟测试）
+        run: python3 -m pip install --upgrade pillow
+
+      - name: 校验 tag 与 manifest 版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -e
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(grep -E '^version=' manifest | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::git 标签 ($TAG) 与 manifest.version ($VER) 不一致，拒绝构建"
+            exit 1
+          fi
+          echo "版本校验通过: $TAG"
+
+      - name: 语法检查
+        run: python3 -m py_compile app/bin/dashboard.py app/bin/fb_render.py app/bin/neon_crypto.py
+
+      - name: 校验向导 JSON
+        run: |
+          python3 -c "import json; json.load(open('wizard/install'))"
+          python3 -c "import json; json.load(open('wizard/config'))"
+
+      - name: 模组冒烟测试（无凭据应返回错误信息而非崩溃）
+        run: |
+          python3 - <<'PY'
+          import importlib.util, json
+
+          def load(path, name):
+              spec = importlib.util.spec_from_file_location(name, path)
+              m = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(m)
+              return m
+
+          cases = [
+              ("neon-dash/example/volc-plan/mod.py", "volc_mod", {}),
+              ("neon-dash/example/glm-plan/mod.py", "glm_mod", {}),
+          ]
+          for path, name, cfg in cases:
+              mod = load(path, name)
+              payload = mod.get_payload(dict(cfg))
+              assert isinstance(payload, dict), path
+              assert payload.get("error"), "%s 空凭据应返回 error 信息" % path
+              print("OK  %s -> %s" % (path, payload["error"][:40]))
+          PY
+
+      - name: 生成应用图标
+        run: python3 tools/make_icons.py
+
+      - name: 打包并签名官方模组
+        env:
+          NDASH_KEY: ${{ secrets.NDASH_SIGNING_KEY }}
+        run: |
+          set -e
+          sign() {
+            if [ -n "$NDASH_KEY" ]; then
+              KEY_FILE="$(mktemp)"; chmod 600 "$KEY_FILE"
+              printf '%s' "$NDASH_KEY" > "$KEY_FILE"
+              python3 neon-dash/ndash.py sign "$1" --key "$KEY_FILE" --signer ci
+              rm -f "$KEY_FILE"
+            else
+              echo "::warning::未配置 secrets.NDASH_SIGNING_KEY，$1 不签名（安装时会显示未签名警示）"
+            fi
+          }
+          python3 neon-dash/ndash.py pack neon-dash/example/volc-plan -o app/bin/volc-plan.neon-dash
+          sign app/bin/volc-plan.neon-dash
+          python3 neon-dash/ndash.py pack neon-dash/example/glm-plan -o app/bin/glm-plan.neon-dash
+          sign app/bin/glm-plan.neon-dash
+
+      - name: 构建 .fpk
+        id: build
+        run: |
+          set -e
+          VER="$(grep -E '^version=' manifest | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+          OUT="dist/${APPNAME}_${VER}.fpk"
+          python3 tools/pack_fpk.py . "$OUT"
+          echo "fpk=$OUT" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: 校验 .fpk 结构与完整性
+        run: |
+          python3 - <<'PY'
+          import hashlib, tarfile
+
+          fpk = "${{ steps.build.outputs.fpk }}"
+          t = tarfile.open(fpk)
+          names = t.getnames()
+          assert names[0] == "app.tgz", "app.tgz 必须是首个成员"
+          for must in ("manifest", "ICON.PNG", "ICON_256.PNG",
+                       "cmd/main", "wizard/install", "config/privilege"):
+              assert must in names, "缺少成员: %s" % must
+
+          mf = t.extractfile("manifest").read().decode()
+          line = [l for l in mf.splitlines() if "checksum" in l][0]
+          expected = line.split("=", 1)[1].strip()
+          actual = "md5(%s)" % hashlib.md5(t.extractfile("app.tgz").read()).hexdigest()
+          assert expected == actual, "checksum 不一致: %s vs %s" % (expected, actual)
+
+          inner = tarfile.open(fileobj=t.extractfile("app.tgz"))
+          inner_names = inner.getnames()
+          for must in ("app/bin/dashboard.py", "app/bin/fb_render.py",
+                       "app/bin/neon_crypto.py", "app/ui/config",
+                       "app/bin/volc-plan.neon-dash", "app/bin/glm-plan.neon-dash",
+                       "config/privilege"):
+              assert must in inner_names, "app.tgz 缺少: %s" % must
+          print("FPK 校验通过：%d 个外层成员，app.tgz %d 个文件" % (len(names), len(inner_names)))
+          PY
+
+      - name: 生成校验和
+        run: |
+          cd dist
+          sha256sum *.fpk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: fnos-dashboard-${{ github.ref_name }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: 附着到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.build.outputs.fpk }}
+            dist/SHA256SUMS.txt

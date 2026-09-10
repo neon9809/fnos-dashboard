@@ -1,0 +1,85 @@
+#!/bin/bash
+# 安装后：根据安装向导生成默认显示配置
+APP_NAME="${TRIM_APPNAME:-com.fnos.dashboard}"
+ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
+CFG_FILE="${ETC_DIR}/config.json"
+THEME="${wizard_theme:-midnight}"
+REFRESH="${wizard_refresh:-2}"
+ROTATE="${wizard_rotate_seconds:-15}"
+CELSIUS="${wizard_celsius:-true}"
+FB="${wizard_fb_enabled:-true}"
+
+mkdir -p "$ETC_DIR" "$VAR_DIR"
+
+python3 - "$CFG_FILE" "$THEME" "$REFRESH" "$CELSIUS" "$ROTATE" "$FB" <<'PY'
+import json, os, sys
+
+path = sys.argv[1]
+theme, refresh, celsius = sys.argv[2], sys.argv[3], sys.argv[4]
+rotate, fb = sys.argv[5], sys.argv[6]
+if theme not in ("midnight", "graphite", "emerald", "solar", "sakura", "light"):
+    theme = "midnight"
+try:
+    refresh = min(60, max(1, int(refresh)))
+except ValueError:
+    refresh = 2
+try:
+    rotate = min(300, max(5, int(rotate)))
+except ValueError:
+    rotate = 15
+
+cfg = {}
+if os.path.exists(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+
+cfg["theme"] = theme
+cfg["refresh"] = refresh
+cfg["rotate_seconds"] = rotate
+cfg["temp_unit"] = "C" if celsius == "true" else "F"
+cfg["fb_enabled"] = fb == "true"
+cfg.setdefault("accent", "")
+cfg.setdefault("fb_rotate", 0)
+cfg.setdefault("screen_inches", 0)
+cfg.setdefault("cards", {
+    "cpu": True, "memory": True, "disk": True,
+    "network": True, "temperature": True, "info": True,
+})
+cfg.setdefault("modules", {"calendar": True, "weather": True})
+cfg.setdefault("weather_city", "北京")
+cfg.setdefault("ext_modules", {})
+cfg["saved_at"] = 0
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, ensure_ascii=False, indent=2)
+PY
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
+    echo "写入默认配置失败（${CFG_FILE}）" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+# 确保应用用户可写配置（安装阶段可能以 root 执行）
+if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-${TRIM_USERNAME}}" "$ETC_DIR" 2>/dev/null
+fi
+
+# 显示器模式：udev 规则允许应用用户写 framebuffer（对本次开机立即生效 + 持久化）
+if [ "$(id -u)" = "0" ] && [ -e /dev/fb0 ]; then
+    RULE="/etc/udev/rules.d/99-fnos-dashboard-fb.rules"
+    echo 'SUBSYSTEM=="graphics", KERNEL=="fb*", MODE="0666"' > "$RULE" 2>/dev/null || true
+    chmod 666 /dev/fb0 2>/dev/null || true
+fi
+
+# 显示器模式中文渲染依赖 PIL（可选）：缺失时 fb 端回退为内置 ASCII 字体
+if ! python3 -c "import PIL" >/dev/null 2>&1; then
+    echo "提示：未安装 python3-PIL，显示器模式将以 ASCII 字体渲染（中文模组需 PIL）" \
+        > "${TRIM_TEMP_LOGFILE}" || true
+fi
+
+exit 0

@@ -1,0 +1,57 @@
+#!/bin/bash
+# 配置后：应用配置向导的新设置（后端每次请求都会读取配置，无需重启）
+APP_NAME="${TRIM_APPNAME:-com.fnos.dashboard}"
+ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
+CFG_FILE="${ETC_DIR}/config.json"
+THEME="${wizard_theme:-midnight}"
+REFRESH="${wizard_refresh:-2}"
+CELSIUS="${wizard_celsius:-true}"
+
+mkdir -p "$ETC_DIR" "$VAR_DIR"
+
+python3 - "$CFG_FILE" "$THEME" "$REFRESH" "$CELSIUS" <<'PY'
+import json, os, sys
+
+path, theme, refresh, celsius = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+if theme not in ("midnight", "graphite", "emerald", "solar", "sakura", "light"):
+    theme = "midnight"
+try:
+    refresh = int(refresh)
+except ValueError:
+    refresh = 2
+refresh = min(60, max(1, refresh))
+
+cfg = {}
+if os.path.exists(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+
+cfg["theme"] = theme
+cfg["refresh"] = refresh
+cfg["temp_unit"] = "C" if celsius == "true" else "F"
+cfg.setdefault("accent", "")
+cfg.setdefault("cards", {
+    "cpu": True, "memory": True, "disk": True,
+    "network": True, "temperature": True, "info": True,
+})
+# 向导修改为全局默认；浏览器端个人设置按 saved_at 时间戳合并
+cfg["saved_at"] = 0
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, ensure_ascii=False, indent=2)
+PY
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
+    echo "写入配置失败（${CFG_FILE}）" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-${TRIM_USERNAME}}" "$ETC_DIR" 2>/dev/null
+fi
+exit 0

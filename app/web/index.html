@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fnOS 状态监视</title>
+<link rel="icon" href="images/icon-64.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-theme="midnight">
+
+<div id="offline" class="offline hidden">连接中断，正在重试…</div>
+
+<header class="topbar">
+  <div class="brand">
+    <img src="images/icon-64.png" alt="logo" draggable="false">
+    <div class="brand-text">
+      <h1>状态监视</h1>
+      <div class="sub"><span id="host-name">…</span><span id="host-os"></span></div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="clock" id="clock">--:--:--</span>
+    <a id="btn-settings" class="icon-btn" href="/settings" target="_blank" title="设置（仅限 NAS 本机访问）">⚙</a>
+  </div>
+</header>
+
+<main class="grid">
+
+  <section class="card" id="card-cpu">
+    <div class="card-head">
+      <h2>CPU</h2>
+      <span class="badge" id="cpu-load">负载 --</span>
+    </div>
+    <div class="big"><span id="cpu-usage">--</span><small>%</small></div>
+    <canvas class="spark" id="cpu-spark" height="64"></canvas>
+    <div class="core-grid" id="cpu-cores"></div>
+  </section>
+
+  <section class="card" id="card-memory">
+    <div class="card-head">
+      <h2>内存</h2>
+      <span class="badge" id="mem-swap">Swap --</span>
+    </div>
+    <div class="big"><span id="mem-usage">--</span><small>%</small></div>
+    <div class="bar"><div class="bar-fill" id="mem-bar"></div></div>
+    <div class="kv"><span id="mem-detail">--</span></div>
+  </section>
+
+  <section class="card" id="card-disk">
+    <div class="card-head">
+      <h2>存储空间</h2>
+      <span class="badge" id="disk-count"></span>
+    </div>
+    <div id="disk-list" class="vol-list"></div>
+  </section>
+
+  <section class="card" id="card-network">
+    <div class="card-head">
+      <h2>网络</h2>
+      <span class="badge" id="net-iface"></span>
+    </div>
+    <div class="net-row">
+      <div class="net-dir down"><span class="arrow">↓</span><div class="net-num"><b id="net-down">--</b><small>下载</small></div></div>
+      <div class="net-dir up"><span class="arrow">↑</span><div class="net-num"><b id="net-up">--</b><small>上传</small></div></div>
+    </div>
+    <canvas class="spark" id="net-spark" height="64"></canvas>
+    <table class="ifaces" id="net-table"></table>
+  </section>
+
+  <section class="card" id="card-temperature">
+    <div class="card-head">
+      <h2>温度</h2>
+      <span class="badge" id="temp-count"></span>
+    </div>
+    <div class="chips" id="temp-chips"></div>
+  </section>
+
+  <section class="card" id="card-info">
+    <div class="card-head">
+      <h2>系统信息</h2>
+    </div>
+    <div class="kv-grid" id="info-grid"></div>
+  </section>
+
+</main>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

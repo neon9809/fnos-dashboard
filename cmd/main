@@ -1,0 +1,134 @@
+#!/bin/bash
+# fnOS 状态监视 —— 启停与状态检查（Web 服务 + 显示器渲染进程）
+APP_NAME="${TRIM_APPNAME:-com.fnos.dashboard}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+APP_BIN="${APP_DIR}/bin/dashboard.py"
+FB_BIN="${APP_DIR}/bin/fb_render.py"
+WEB_DIR="${APP_DIR}/web"
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
+ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
+PID_FILE="${VAR_DIR}/app.pid"
+FB_PID_FILE="${VAR_DIR}/fb.pid"
+LOG_FILE="${VAR_DIR}/app.log"
+FB_LOG_FILE="${VAR_DIR}/fb.log"
+PORT="${TRIM_SERVICE_PORT:-8199}"
+CFG_FILE="${ETC_DIR}/config.json"
+
+fb_enabled() {
+    [ -f "$CFG_FILE" ] || return 1
+    [ -e /dev/fb0 ] || return 1
+    python3 - "$CFG_FILE" <<'PY' 2>/dev/null || return 1
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if cfg.get("fb_enabled") else 1)
+PY
+}
+
+fb_runnable() {
+    [ -r /dev/fb0 ] && [ -w /dev/fb0 ]
+}
+
+check_pid() {
+    local f="$1"
+    if [ -f "$f" ]; then
+        local pid
+        pid=$(cat "$f" | tr -d '[:space:]')
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "$f"
+    fi
+    return 1
+}
+
+start_backend() {
+    if check_pid "$PID_FILE"; then
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "未找到 python3，无法启动状态监视服务！" > "${TRIM_TEMP_LOGFILE}"
+        return 1
+    fi
+    if [ ! -f "$APP_BIN" ]; then
+        echo "应用文件缺失：${APP_BIN}" > "${TRIM_TEMP_LOGFILE}"
+        return 1
+    fi
+    mkdir -p "$VAR_DIR" "$ETC_DIR"
+    nohup python3 "$APP_BIN" \
+        --host 0.0.0.0 \
+        --port "$PORT" \
+        --web "$WEB_DIR" \
+        --config "$CFG_FILE" \
+        --var "$VAR_DIR" \
+        >> "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    sleep 2
+    if ! check_pid "$PID_FILE"; then
+        rm -f "$PID_FILE"
+        echo "状态监视服务启动失败，请查看日志：${LOG_FILE}" > "${TRIM_TEMP_LOGFILE}"
+        return 1
+    fi
+    return 0
+}
+
+start_fb() {
+    if ! fb_enabled; then
+        return 0
+    fi
+    if check_pid "$FB_PID_FILE"; then
+        return 0
+    fi
+    if ! fb_runnable; then
+        echo "显示器模式已开启，但 /dev/fb0 不可读写（需安装时的 udev 规则或 video 组权限）" \
+            >> "$FB_LOG_FILE" 2>/dev/null || true
+        return 0
+    fi
+    nohup python3 "$FB_BIN" --fb /dev/fb0 --api "http://127.0.0.1:${PORT}" \
+        >> "$FB_LOG_FILE" 2>&1 &
+    echo $! > "$FB_PID_FILE"
+    return 0
+}
+
+stop_pid() {
+    local f="$1"
+    if [ -f "$f" ]; then
+        local pid
+        pid=$(cat "$f" | tr -d '[:space:]')
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid"
+            local count=0
+            while kill -0 "$pid" 2>/dev/null && [ "$count" -lt 10 ]; do
+                sleep 1
+                count=$((count + 1))
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -KILL "$pid" 2>/dev/null
+            fi
+        fi
+        rm -f "$f"
+    fi
+    return 0
+}
+
+case $1 in
+start)
+    start_backend || exit 1
+    start_fb
+    ;;
+stop)
+    stop_pid "$FB_PID_FILE"
+    stop_pid "$PID_FILE"
+    ;;
+status)
+    if check_pid "$PID_FILE"; then
+        exit 0
+    fi
+    exit 3
+    ;;
+*)
+    exit 1
+    ;;
+esac
