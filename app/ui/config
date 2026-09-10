@@ -4,10 +4,8 @@
             "title": "状态监视",
             "icon": "images/icon-{0}.png",
             "type": "iframe",
-            "protocol": "",
-            "gatewayPrefix": "/app/fnos-dashboard",
-            "gatewaySocket": "app.sock",
-            "url": "/app/fnos-dashboard",
+            "protocol": "http",
+            "url": "/cgi/ThirdParty/com.fnos.dashboard/index.cgi/settings",
             "allUsers": true
         }
     }

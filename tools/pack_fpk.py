@@ -47,7 +47,9 @@ def build_app_tgz(root, mtime):
                     full = os.path.join(dirpath, fn)
                     arc = os.path.join(arc_prefix,
                                        os.path.relpath(full, base_dir))
-                    add_file(tar, full, arc.replace(os.sep, "/"), mtime)
+                    # fnOS CGI 要求入口脚本带执行权限
+                    add_file(tar, full, arc.replace(os.sep, "/"), mtime,
+                             executable=fn.endswith((".cgi", ".sh")))
     # 安装器要求 app.tgz 是 gzip 压缩的 tar
     return gzip.compress(buf.getvalue())
 
