@@ -14,8 +14,10 @@ FB_LOG_FILE="${VAR_DIR}/fb.log"
 PORT="${TRIM_SERVICE_PORT:-8199}"
 CFG_FILE="${ETC_DIR}/config.json"
 
-# manifest 声明了 install_dep_apps=python312：优先使用打包运行时，缺失时回退系统 python3
-[ -d /var/apps/python312/target/bin ] && export PATH="/var/apps/python312/target/bin:$PATH"
+# 声明了 install_dep_apps=python312 作兜底：系统 python3（含 python3-pil）优先
+if ! command -v python3 >/dev/null 2>&1 && [ -d /var/apps/python312/target/bin ]; then
+    export PATH="/var/apps/python312/target/bin:$PATH"
+fi
 
 fb_enabled() {
     [ -f "$CFG_FILE" ] || return 1

@@ -31,6 +31,67 @@ MIME = {
 }
 
 
+def fb_raw_read():
+    """读取 /dev/fb0 当前帧，返回 (w, h, bgra, stride)。"""
+    base = "/sys/class/graphics/fb0"
+    vs = open(os.path.join(base, "virtual_size")).read().strip()
+    w, h = (int(x) for x in vs.split(",")[:2])
+    bpp = int(open(os.path.join(base, "bits_per_pixel")).read().strip())
+    if bpp != 32:
+        raise RuntimeError("仅支持 32bpp 帧缓冲，当前 %dbpp" % bpp)
+    stride_file = os.path.join(base, "stride")
+    stride = max(w * 4,
+                 int(open(stride_file).read().strip())
+                 if os.path.exists(stride_file) else w * 4)
+    import mmap
+    fd = os.open("/dev/fb0", os.O_RDONLY)
+    try:
+        mm = mmap.mmap(fd, stride * h, access=mmap.ACCESS_READ)
+        # 必须取到 (h-1)*stride + w*4：stride 有填充时末行数据超出 w*4*h
+        raw = mm[:(h - 1) * stride + w * 4]
+        mm.close()
+    finally:
+        os.close(fd)
+    return w, h, raw, stride
+
+
+def bgra_to_png(w, h, bgra, stride):
+    """BGRA 帧 → PNG（RGB）。有 PIL 用 PIL；缺失时纯 zlib 编码，预览不依赖 PIL。"""
+    try:
+        from PIL import Image
+    except ImportError:
+        Image = None
+    if Image is not None:
+        import io as _io
+        packed = bytearray(w * h * 4)
+        for y in range(h):
+            # 去除行填充后再交给 PIL（raw 解码要求紧排数据）
+            packed[y * w * 4:(y + 1) * w * 4] = bgra[y * stride:y * stride + w * 4]
+        img = Image.frombytes("RGBA", (w, h), bytes(packed), "raw", "BGRA")
+        out = _io.BytesIO()
+        img.convert("RGB").save(out, "PNG")
+        return out.getvalue()
+    import struct
+    import zlib
+
+    def chunk(typ, data):
+        return (struct.pack(">I", len(data)) + typ + data
+                + struct.pack(">I", zlib.crc32(typ + data) & 0xFFFFFFFF))
+
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+    rows = bytearray()
+    for y in range(h):
+        row = bgra[y * stride: y * stride + w * 4]
+        rgb = bytearray(w * 3)
+        rgb[0::3] = row[2::4]           # R（源为 BGRA）
+        rgb[1::3] = row[1::4]
+        rgb[2::3] = row[0::4]
+        rows += b"\x00" + rgb           # scanline filter 0
+    idat = zlib.compress(bytes(rows), 6)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", idat) + chunk(b"IEND", b""))
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "fnos-dashboard/" + APP_VERSION
     protocol_version = "HTTP/1.1"
@@ -235,31 +296,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _fb_dump_png(self):
         try:
-            from PIL import Image
-        except ImportError:
+            w, h, bgra, stride = fb_raw_read()
+        except Exception:
             return None
-        base = "/sys/class/graphics/fb0"
         try:
-            vs = open(os.path.join(base, "virtual_size")).read().strip()
-            w, h = (int(x) for x in vs.split(",")[:2])
-            bpp = int(open(os.path.join(base, "bits_per_pixel")).read().strip())
-            if bpp != 32:
-                return None
-            stride_file = os.path.join(base, "stride")
-            stride = max(w * 4,
-                         int(open(stride_file).read().strip())
-                         if os.path.exists(stride_file) else w * 4)
-            fd = os.open("/dev/fb0", os.O_RDONLY)
-            import mmap
-            mm = mmap.mmap(fd, stride * h, access=mmap.ACCESS_READ)
-            img = Image.frombytes("RGBA", (w, h), bytes(mm[:w * 4 * h]),
-                                  "raw", "BGRA")
-            mm.close()
-            os.close(fd)
-            import io as _io
-            out = _io.BytesIO()
-            img.convert("RGB").save(out, "PNG")
-            return out.getvalue()
+            return bgra_to_png(w, h, bgra, stride)
         except Exception:
             return None
 
@@ -315,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             png = self._fb_dump_png()
             if png is None:
                 self._send_json(404, {"ok": False,
-                                      "error": "帧缓冲不可用（未启用或无 PIL/权限）"})
+                                      "error": "帧缓冲不可用（未启用或无权限）"})
                 return
             self._send(200, png, ctype="image/png")
             return

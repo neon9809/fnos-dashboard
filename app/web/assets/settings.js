@@ -120,6 +120,7 @@ function renderSwatches() {
     b.title = color;
     b.addEventListener("click", function () {
       state.accent = color;
+      renderThemes();   // 主题卡预览即时跟随强调色（内部重绘强调色区）
       renderSwatches();
     });
     wrap.appendChild(b);
@@ -452,10 +453,12 @@ function bindUI() {
 
   document.getElementById("accent-picker").addEventListener("input", function () {
     state.accent = this.value;
+    renderThemes();
     renderSwatches();
   });
   document.getElementById("accent-reset").addEventListener("click", function () {
     state.accent = "";
+    renderThemes();
     renderSwatches();
   });
   document.getElementById("set-temp-unit").addEventListener("change", function () {

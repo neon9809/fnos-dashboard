@@ -14,6 +14,7 @@ import fcntl
 import json
 import mmap
 import os
+import re
 import sys
 import threading
 import time
@@ -812,6 +813,9 @@ def main():
         cfg = fetcher.config or {}
         pal_key = cfg.get("theme", "midnight")
         pal = {k: hex_rgb(v) for k, v in PALETTES.get(pal_key, PALETTES["midnight"]).items()}
+        accent = str(cfg.get("accent") or "")
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
+            pal["accent"] = hex_rgb(accent)   # 自定义强调色覆盖主题默认
 
         new_rotate = cfg.get("fb_rotate") if cfg.get("fb_rotate") in (0, 90, 180, 270) else 0
         if new_rotate != rotate:
