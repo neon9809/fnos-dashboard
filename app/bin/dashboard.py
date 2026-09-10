@@ -1220,17 +1220,31 @@ class Handler(BaseHTTPRequestHandler):
     var_dir = "."
     etc_dir = "."
     ext = None  # ExtModules
+    http_port = 0          # TCP 服务端口（fb_render 回源用）
+    gateway_prefix = ""    # 统一网关前缀，如 /app/com.fnos.dashboard
 
     def log_message(self, fmt, *args):
         pass  # 静默访问日志，避免 app.log 膨胀
 
     # ---- 基础工具 ----
-    def _is_local(self):
+    def _trim_gateway_prefix(self, path):
+        gp = self.gateway_prefix
+        if gp and path != gp and path.startswith(gp + "/"):
+            path = path[len(gp):] or "/"
+        elif path == gp:
+            path = "/"
+        return path
+
+    def _is_trusted(self):
+        # 统一网关请求已由飞牛校验 NAS 登录态后转发，视为可信；
+        # 直连 TCP 端口仍要求来源为本机
+        if getattr(self.server, "gateway", False):
+            return True
         return self.client_address[0] in ("127.0.0.1", "::1")
 
     def _public_cfg(self, cfg):
-        """非本机请求脱敏：API Key / Token 仅回掩码。"""
-        if self._is_local():
+        """非可信请求脱敏：API Key / Token 仅回掩码。"""
+        if self._is_trusted():
             return cfg
         cfg = json.loads(json.dumps(cfg))
         if cfg.get("qweather_key"):
@@ -1336,7 +1350,7 @@ class Handler(BaseHTTPRequestHandler):
             os.path.dirname(os.path.abspath(__file__)), "fb_render.py")
         if not os.path.isfile(fb_bin):
             return
-        port = self.server.server_address[1]
+        port = self.http_port
         log_path = os.path.join(self.var_dir, "fb.log")
         try:
             log = open(log_path, "ab")
@@ -1411,7 +1425,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- GET ----
     def do_GET(self):
-        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        path = self._trim_gateway_prefix(
+            self.path.split("?", 1)[0].split("#", 1)[0])
         if path == "/api/status":
             cfg = self.config.get()
             self._send_json(200, {
@@ -1444,8 +1459,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "config": self._public_cfg(cfg)})
             return
 
-        # ---- 管理面：仅限本机 ----
-        if not self._is_local():
+        # ---- 管理面：仅限可信来源（本机 / 统一网关） ----
+        if not self._is_trusted():
             if path == "/settings" or path.startswith("/settings/") or \
                     path.startswith("/api/fb/") or path.startswith("/api/ext/") or \
                     path == "/api/settings":
@@ -1487,8 +1502,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- POST / DELETE ----
     def do_POST(self):
-        path = self.path.split("?", 1)[0]
-        if not self._is_local():
+        path = self._trim_gateway_prefix(self.path.split("?", 1)[0])
+        if not self._is_trusted():
             if path == "/api/settings" or path == "/api/config" or \
                     path.startswith("/api/ext/"):
                 self._deny_local_only()
@@ -1574,8 +1589,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(405, {"ok": False, "error": "Method Not Allowed"})
 
     def do_DELETE(self):
-        path = self.path.split("?", 1)[0]
-        if not self._is_local():
+        path = self._trim_gateway_prefix(self.path.split("?", 1)[0])
+        if not self._is_trusted():
             self._deny_local_only()
             return
         if path == "/api/ext/keys":
@@ -1592,6 +1607,11 @@ class Handler(BaseHTTPRequestHandler):
 # --------------------------------------------------------------------------
 # 入口
 # --------------------------------------------------------------------------
+class UnixThreadingHTTPServer(ThreadingHTTPServer):
+    """统一网关入口：监听 ${TRIM_APPDEST}/app.sock（请求经飞牛登录态校验转发）。"""
+    address_family = socket.AF_UNIX
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description="fnOS 状态监视后端")
@@ -1607,6 +1627,11 @@ def main():
     ap.add_argument("--var",
                     default=os.environ.get("TRIM_PKGVAR",
                                            os.path.normpath(os.path.join(here, "..", "var"))))
+    ap.add_argument("--socket", default="",
+                    help="统一网关 Unix Socket 路径（如 ${TRIM_APPDEST}/app.sock）")
+    ap.add_argument("--gateway-prefix",
+                    default="/app/" + os.environ.get("TRIM_APPNAME",
+                                                     "com.fnos.dashboard"))
     args = ap.parse_args()
 
     var_dir = args.var
@@ -1627,21 +1652,51 @@ def main():
     Handler.var_dir = var_dir
     Handler.etc_dir = etc_dir
     Handler.ext = ext
+    Handler.http_port = args.port
+    Handler.gateway_prefix = args.gateway_prefix.rstrip("/")
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
+    server.gateway = False
+    servers = [server]
+
+    if args.socket:
+        try:
+            os.unlink(args.socket)      # 清理上次异常退出遗留的 Socket
+        except OSError:
+            pass
+        gw = UnixThreadingHTTPServer(args.socket, Handler)
+        gw.daemon_threads = True
+        gw.gateway = True
+        try:
+            os.chmod(args.socket, 0o666)  # 供系统网关进程连接
+        except OSError:
+            pass
+        servers.append(gw)
+        threading.Thread(
+            target=gw.serve_forever, kwargs={"poll_interval": 0.5},
+            daemon=True, name="gateway-socket").start()
 
     def _shutdown(signum, _frame):
-        threading.Thread(target=server.shutdown, daemon=True).start()
+        for s in servers:
+            threading.Thread(target=s.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-    print("[fnos-dashboard] v%s listening on %s:%d, web=%s, config=%s"
-          % (APP_VERSION, args.host, args.port, args.web, cfg.path), flush=True)
+    print("[fnos-dashboard] v%s listening on %s:%d, web=%s, config=%s%s"
+          % (APP_VERSION, args.host, args.port, args.web, cfg.path,
+             ", gateway=%s (%s)" % (args.socket, Handler.gateway_prefix)
+             if args.socket else ""), flush=True)
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
-        server.server_close()
+        for s in servers:
+            s.server_close()
+        if args.socket:
+            try:
+                os.unlink(args.socket)
+            except OSError:
+                pass
     return 0
 
 

@@ -57,12 +57,14 @@ start_backend() {
         return 1
     fi
     mkdir -p "$VAR_DIR" "$ETC_DIR"
+    rm -f "${APP_DIR}/app.sock"
     nohup python3 "$APP_BIN" \
         --host 0.0.0.0 \
         --port "$PORT" \
         --web "$WEB_DIR" \
         --config "$CFG_FILE" \
         --var "$VAR_DIR" \
+        --socket "${APP_DIR}/app.sock" \
         >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     sleep 2
@@ -121,6 +123,7 @@ start)
 stop)
     stop_pid "$FB_PID_FILE"
     stop_pid "$PID_FILE"
+    rm -f "${APP_DIR}/app.sock"
     ;;
 status)
     if check_pid "$PID_FILE"; then

@@ -4,9 +4,10 @@
             "title": "状态监视",
             "icon": "images/icon-{0}.png",
             "type": "iframe",
-            "protocol": "http",
-            "port": "8199",
-            "url": "/settings",
+            "protocol": "",
+            "gatewayPrefix": "/app/com.fnos.dashboard",
+            "gatewaySocket": "app.sock",
+            "url": "/app/com.fnos.dashboard/settings",
             "allUsers": true
         }
     }
