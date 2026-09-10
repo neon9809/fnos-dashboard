@@ -264,14 +264,18 @@ function renderExtModules() {
       tCb.type = "checkbox";
       tCb.checked = !!m.enabled;
       tCb.addEventListener("change", function () {
+        // 保留已输入未保存的配置（先填 Key 再点启用开关时不能丢失）
+        var prev = state.ext_modules[m.id] || {};
+        var conf = (prev.config && Object.keys(prev.config).length)
+          ? prev.config : (m.config || {});
         if (!tCb.checked) {
-          state.ext_modules[m.id] = { enabled: false, config: m.config || {} };
+          state.ext_modules[m.id] = { enabled: false, config: conf };
           save();
           return;
         }
         riskConfirm().then(function (yes) {
           if (!yes) { tCb.checked = false; return; }
-          state.ext_modules[m.id] = { enabled: true, config: m.config || {} };
+          state.ext_modules[m.id] = { enabled: true, config: conf };
           save();
         });
       });

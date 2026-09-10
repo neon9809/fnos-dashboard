@@ -130,12 +130,19 @@ class FB:
                           int(open(stride_file).read().strip())
                           if os.path.exists(stride_file) else self.w * 4)
         self.fd = os.open(path, os.O_RDWR)
-        try:
-            # 文件锁保证同一帧缓冲只有一个渲染进程，防止双写导致画面冻结
-            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            os.close(self.fd)
-            raise RuntimeError("另一个渲染进程正在使用 " + path)
+        # 文件锁保证同一帧缓冲只有一个渲染进程。后端保存设置时会先杀旧进程再拉起，
+        # 存在锁释放竞态——这里等待拿锁而不是退出，否则屏幕会冻结在最后一帧
+        deadline = time.time() + 15
+        while True:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.time() >= deadline:
+                    os.close(self.fd)
+                    raise RuntimeError("另一个渲染进程正在使用 " + path)
+                print("[fb] 等待帧缓冲锁释放…", flush=True)
+                time.sleep(0.5)
         self.mm = mmap.mmap(self.fd, self.stride * self.h)
         self._row = self.w * 4
 
@@ -851,7 +858,8 @@ def main():
         else:
             ui_scale = max(0.6, res_scale)
 
-        # 单页绘制异常只丢弃本帧，绝不退出渲染进程
+        # 单页绘制异常只丢弃本帧并屏显错误行，绝不退出渲染进程
+        draw_failed = False
         try:
             canvas.begin(pal["bg"])
             r = Renderer(canvas, canvas_w, canvas_h, ui_scale)
@@ -871,12 +879,23 @@ def main():
                 r.page_ext(payload, pal)
             r.footer(pal, pages, idx, rotate_sec)
         except Exception as e:
-            print("[fb] 页面绘制异常：%r" % e, flush=True)
+            draw_failed = True
+            print("[fb] 页面 %s 绘制异常：%r" % (pages[idx], e), flush=True)
+            try:
+                canvas.begin(pal["bg"])
+                canvas.text(30 * ui_scale, 60 * ui_scale,
+                            "ERR %s" % pages[idx], 24 * ui_scale, pal["danger"])
+            except Exception:
+                pass
 
-        frame = canvas.to_bgra(rotate)
-        if frame != last_frame:          # 内容未变时跳过整帧写屏
-            fb.blit(frame)
-            last_frame = frame
+        try:
+            frame = canvas.to_bgra(rotate)
+            # 绘制失败时强制刷屏：避免异常帧与上一帧相同被跳过，画面冻结在旧内容
+            if draw_failed or frame != last_frame:
+                fb.blit(frame)
+                last_frame = frame
+        except Exception as e:
+            print("[fb] 帧输出异常：%r" % e, flush=True)
         # 对齐到整秒边界，避免重绘相位漂移
         time.sleep(max(0.05, 1.0 - (time.time() - now)))
 

@@ -92,6 +92,12 @@ def bgra_to_png(w, h, bgra, stride):
             + chunk(b"IDAT", idat) + chunk(b"IEND", b""))
 
 
+def fb_restart_needed(prev, cur):
+    """仅显示器进程级配置变化才重启渲染进程；其余（模组、主题、强调色等）均热加载。"""
+    return any(prev.get(k) != cur.get(k)
+               for k in ("fb_enabled", "fb_rotate", "screen_inches"))
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "fnos-dashboard/" + APP_VERSION
     protocol_version = "HTTP/1.1"
@@ -222,7 +228,18 @@ class Handler(BaseHTTPRequestHandler):
             except (ChildProcessError, OSError):
                 pass
 
-        for pid in _scan_renderers():
+        def _log(msg):
+            # 诊断写入 fb.log：真机上排障时 cat var/fb.log 即可看到重启过程
+            try:
+                with open(os.path.join(self.var_dir, "fb.log"), "a",
+                          encoding="utf-8") as f:
+                    f.write("[backend %s] %s\n"
+                            % (time.strftime("%m-%d %H:%M:%S"), msg))
+            except OSError:
+                pass
+
+        old_pids = _scan_renderers()
+        for pid in old_pids:
             try:
                 os.kill(pid, signal.SIGTERM)
             except OSError:
@@ -243,13 +260,18 @@ class Handler(BaseHTTPRequestHandler):
             os.unlink(pid_file)
         except OSError:
             pass
+        if old_pids:
+            _log("restart: 已终止旧渲染进程 %s" % old_pids)
 
         cfg = self.config.get()
         if not cfg.get("fb_enabled") or not os.path.exists("/dev/fb0"):
+            _log("restart: 未拉起（fb_enabled=%s, /dev/fb0=%s）"
+                 % (cfg.get("fb_enabled"), os.path.exists("/dev/fb0")))
             return
         fb_bin = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "fb_render.py")
         if not os.path.isfile(fb_bin):
+            _log("restart: 未拉起（缺少 %s）" % fb_bin)
             return
         port = self.http_port
         log_path = os.path.join(self.var_dir, "fb.log")
@@ -261,8 +283,11 @@ class Handler(BaseHTTPRequestHandler):
                 stdout=log, stderr=log, stdin=subprocess.DEVNULL,
                 start_new_session=True)
             log.close()
-        except OSError:
+        except OSError as e:
+            _log("restart: 拉起失败 %r" % e)
             return
+        _log("restart: 已拉起渲染进程 pid=%d (%s)"
+             % (proc.pid, sys.executable))
         with open(pid_file, "w") as f:
             f.write(str(proc.pid))
 
@@ -389,13 +414,14 @@ class Handler(BaseHTTPRequestHandler):
             if patch is None:
                 self._send_json(400, {"ok": False, "error": "无效的请求体"})
                 return
+            prev = self.config.get()
             ok, err = self.config.update(patch)
             if ok:
-                # 显示器相关设置变更后立即重启渲染进程，无需重启应用
-                if {"fb_enabled", "fb_rotate", "screen_inches",
-                    "rotate_seconds"} & set(patch):
+                cur = self.config.get()
+                # 显示器进程级配置真正变化才重启渲染进程（避免无谓的杀进程/拉起）
+                if fb_restart_needed(prev, cur):
                     self._fb_restart()
-                self._send_json(200, {"ok": True, "config": self.config.get()})
+                self._send_json(200, {"ok": True, "config": cur})
             else:
                 self._send_json(400, {"ok": False, "error": err})
             return
