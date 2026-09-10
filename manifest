@@ -1,15 +1,16 @@
 appname=com.fnos.dashboard
-version=0.0.1
+version=0.0.2
 display_name=状态监视
-desc=fnOS 系统状态监视面板：实时 CPU、内存、存储、网络与温度；HDMI/VGA 显示器直出（自动轮换、无需键鼠）；预装火山方舟 Plan / 智谱 GLM Coding Plan 用量模组；6 款主题 + 自定义强调色。设置页仅限 NAS 本机访问。
+desc=<b>fnOS 状态监视面板</b>——参考 lcdsimple 的「采集快照 + 主题化渲染」思路，为飞牛 fnOS 打造的开源监控应用。<br><br>✦ 实时监控：CPU（含每核心）/ 内存 / 存储卷 / 网络速率 / 温度传感器 / 系统信息<br>✦ 显示器直出：HDMI/VGA 屏幕独立显示状态页，自动轮换翻页，无需键鼠（支持 0/90/180/270° 旋转与 PPI 自适应）<br>✦ 模组系统：预装火山方舟 Plan、智谱 GLM Coding Plan 用量监控，ed25519 签名校验，可自行开发 .neon-dash 模组<br>✦ 天气预报：和风天气 / Open-Meteo 双数据源，含花粉过敏指数等生活指数<br>✦ 自定义主题：6 款内置配色 + 任意强调色，Web 面板与显示器实时同步<br><br>⚙ 设置页仅限 NAS 本机访问（127.0.0.1），模组启用前有风险告知<br>📦 项目地址：<a href='https://github.com/neon9809/fnos-dashboard'>github.com/neon9809/fnos-dashboard</a><br>👤 作者主页：<a href='https://github.com/neon9809'>github.com/neon9809</a>
 platform=all
 source=thirdparty
-maintainer=fnos-dashboard
-distributor=fnos-dashboard
+maintainer=neon9809
+distributor=neon9809
+app_link=https://github.com/neon9809/fnos-dashboard
 service_port=8199
 checkport=true
 os_min_version=0.9.0
 desktop_uidir=ui
 desktop_applaunchname=com.fnos.dashboard.main
 ctl_stop=true
-changelog=beta-0.0.1：首个公开测试版。Web 面板 + 显示器直出 + 火山方舟/GLM Plan 用量模组。
+changelog=beta-0.0.2：完善应用介绍与开发者信息。功能同 beta-0.0.1：Web 面板 + 显示器直出 + 火山方舟/GLM Plan 用量模组 + 和风天气。
