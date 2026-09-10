@@ -39,7 +39,8 @@ TARGET_URL="http://${TARGET_HOST}:${TARGET_PORT}${REL_PATH}"
 [ -n "$QUERY_STRING" ] && TARGET_URL="${TARGET_URL}?${QUERY_STRING}"
 
 METHOD=${REQUEST_METHOD:-GET}
-set -- -s -X "$METHOD"
+# --max-time：后端卡住时快速失败，避免 CGI 进程堆积（502 分支会返回提示）
+set -- -s --max-time 30 --connect-timeout 5 -X "$METHOD"
 [ -n "$HTTP_ACCEPT" ]          && set -- "$@" -H "accept: $HTTP_ACCEPT"
 [ -n "$HTTP_ACCEPT_LANGUAGE" ] && set -- "$@" -H "accept-language: $HTTP_ACCEPT_LANGUAGE"
 [ -n "$HTTP_USER_AGENT" ]      && set -- "$@" -H "user-agent: $HTTP_USER_AGENT"

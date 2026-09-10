@@ -8,7 +8,9 @@
   --ok: #34d399;
 }
 
-/* ---------------- 主题调色板 ---------------- */
+/* ---------------- 主题调色板 ----------------
+   调色板正本：--bg1 供 app.js / settings.js 的 THEMES[].bg 与
+   fb_render.PALETTES 的 bg 引用，修改后三处需同步 */
 body[data-theme="midnight"] {
   --bg1: #0a1322; --bg2: #12244a;
   --card: #121e36; --card-brd: rgba(148, 180, 255, .10);

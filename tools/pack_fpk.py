@@ -6,6 +6,7 @@
   app.tgz（置首）、cmd/**、config/**、ICON.PNG、ICON_256.PNG、manifest、wizard/**
 app.tgz = gzip(tar(app/** + config/** 副本))，条目相对 app 根目录（不带 app/ 前缀）
 manifest 追加一行 checksum = md5(app.tgz) 供安装器完整性校验（值为纯 hex 摘要）。
+可复现构建：tar/gzip 时间戳取 SOURCE_DATE_EPOCH（默认 0），同源码产物逐字节一致。
 """
 
 import glob
@@ -50,14 +51,22 @@ def build_app_tgz(root, mtime):
                     # fnOS CGI 要求入口脚本带执行权限
                     add_file(tar, full, arc.replace(os.sep, "/"), mtime,
                              executable=fn.endswith((".cgi", ".sh")))
-    # 安装器要求 app.tgz 是 gzip 压缩的 tar
-    return gzip.compress(buf.getvalue())
+    # 安装器要求 app.tgz 是 gzip 压缩的 tar；mtime=0 保证产物可复现
+    return gzip.compress(buf.getvalue(), mtime=0)
+
+
+def _source_mtime():
+    """可复现构建：tar 成员时间戳固定（默认 0，可用 SOURCE_DATE_EPOCH 覆盖）。"""
+    try:
+        return int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
+    except ValueError:
+        return 0
 
 
 def main():
     root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
     out = sys.argv[2] if len(sys.argv) > 2 else "dist/com.fnos.dashboard.fpk"
-    mtime = int(time.time()) if (time := __import__("time")) else 0
+    mtime = _source_mtime()
 
     manifest_path = os.path.join(root, "manifest")
     with open(manifest_path, "r", encoding="utf-8") as f:
@@ -92,8 +101,8 @@ def main():
                 add_file(tar, path, name, mtime,
                          executable=name.startswith("cmd/"))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with gzip.open(out, "wb") as gz:
-        gz.write(buf.getvalue())
+    with open(out, "wb") as f:
+        f.write(gzip.compress(buf.getvalue(), mtime=0))
     print("打包完成：%s (%.1f KB)  app.tgz md5=%s"
           % (out, os.path.getsize(out) / 1024, checksum))
 

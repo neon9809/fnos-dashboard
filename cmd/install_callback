@@ -10,6 +10,9 @@ ROTATE="${wizard_rotate_seconds:-15}"
 CELSIUS="${wizard_celsius:-true}"
 FB="${wizard_fb_enabled:-true}"
 
+# manifest 声明了 install_dep_apps=python312：优先使用打包运行时，缺失时回退系统 python3
+[ -d /var/apps/python312/target/bin ] && export PATH="/var/apps/python312/target/bin:$PATH"
+
 mkdir -p "$ETC_DIR" "$VAR_DIR"
 
 python3 - "$CFG_FILE" "$THEME" "$REFRESH" "$CELSIUS" "$ROTATE" "$FB" <<'PY'
@@ -52,7 +55,6 @@ cfg.setdefault("cards", {
 cfg.setdefault("modules", {"calendar": True, "weather": True})
 cfg.setdefault("weather_city", "北京")
 cfg.setdefault("ext_modules", {})
-cfg["saved_at"] = 0
 
 with open(path, "w", encoding="utf-8") as f:
     json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -69,11 +71,15 @@ if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME}" ]; then
     chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-${TRIM_USERNAME}}" "$ETC_DIR" 2>/dev/null
 fi
 
-# 显示器模式：udev 规则允许应用用户写 framebuffer（对本次开机立即生效 + 持久化）
+# 显示器模式：udev 规则允许应用用户（video 组）写 framebuffer，权限收敛为 0660
+# （privilege 已声明 join-groups: ["video"]），避免所有用户可写；对本次开机立即生效
 if [ "$(id -u)" = "0" ] && [ -e /dev/fb0 ]; then
     RULE="/etc/udev/rules.d/99-fnos-dashboard-fb.rules"
-    echo 'SUBSYSTEM=="graphics", KERNEL=="fb*", MODE="0666"' > "$RULE" 2>/dev/null || true
-    chmod 666 /dev/fb0 2>/dev/null || true
+    echo 'SUBSYSTEM=="graphics", KERNEL=="fb*", GROUP="video", MODE="0660"' \
+        > "$RULE" 2>/dev/null || true
+    udevadm control --reload-rules 2>/dev/null || true
+    chgrp video /dev/fb0 2>/dev/null || true
+    chmod 660 /dev/fb0 2>/dev/null || true
 fi
 
 # 显示器模式中文渲染依赖 PIL（可选）：缺失时 fb 端回退为内置 ASCII 字体

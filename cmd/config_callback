@@ -8,6 +8,9 @@ THEME="${wizard_theme:-midnight}"
 REFRESH="${wizard_refresh:-2}"
 CELSIUS="${wizard_celsius:-true}"
 
+# manifest 声明了 install_dep_apps=python312：优先使用打包运行时，缺失时回退系统 python3
+[ -d /var/apps/python312/target/bin ] && export PATH="/var/apps/python312/target/bin:$PATH"
+
 mkdir -p "$ETC_DIR" "$VAR_DIR"
 
 python3 - "$CFG_FILE" "$THEME" "$REFRESH" "$CELSIUS" <<'PY'
@@ -38,8 +41,6 @@ cfg.setdefault("cards", {
     "cpu": True, "memory": True, "disk": True,
     "network": True, "temperature": True, "info": True,
 })
-# 向导修改为全局默认；浏览器端个人设置按 saved_at 时间戳合并
-cfg["saved_at"] = 0
 
 with open(path, "w", encoding="utf-8") as f:
     json.dump(cfg, f, ensure_ascii=False, indent=2)

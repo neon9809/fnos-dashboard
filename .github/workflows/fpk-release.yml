@@ -43,7 +43,7 @@ jobs:
           echo "版本校验通过: $TAG"
 
       - name: 语法检查
-        run: python3 -m py_compile app/bin/dashboard.py app/bin/fb_render.py app/bin/neon_crypto.py
+        run: python3 -m py_compile app/bin/dashboard.py app/bin/dash_config.py app/bin/dash_stats.py app/bin/dash_modules.py app/bin/dash_http.py app/bin/fb_render.py app/bin/neon_crypto.py
 
       - name: 校验向导 JSON
         run: |

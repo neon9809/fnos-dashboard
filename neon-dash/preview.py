@@ -110,9 +110,6 @@ DEMO_WEATHER = {
     "error": "",
 }
 
-DEMO_CODING = {"name": "GLM Coding Plan", "ok": True, "used": 123.4,
-               "total": 500.0, "reset": "2026-10-01", "error": ""}
-
 DEMO_PAYLOAD = {
     "title": "示例模组",
     "subtitle": "由 .neon-dash 包提供",
@@ -213,15 +210,8 @@ def render_page(req):
             payload_out = dict(DEMO_WEATHER)
         r.page_weather(payload_out, pal, False)
         page_name = "天气预报"
-    elif page == "coding":
-        p = req.get("payload")
-        if isinstance(p, dict) and ("ok" in p or p.get("name")):
-            payload_out = p
-        else:
-            payload_out = dict(DEMO_CODING)
-        r.page_coding(payload_out, pal)
-        page_name = "Coding Plan"
-    else:  # custom：payload 或代码
+    else:  # custom：payload 或代码（Coding Plan 等官方模组已迁为扩展模组，
+            # 渲染走 page_ext，与「自定义」页一致）
         if req.get("code"):
             payload_out, err = run_code(req.get("code"), req.get("config") or {})
         else:

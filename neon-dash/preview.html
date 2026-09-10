@@ -63,7 +63,6 @@ textarea.config { height:52px; }
           <option value="system">系统状态（演示数据）</option>
           <option value="calendar">日历</option>
           <option value="weather">天气预报</option>
-          <option value="coding">Coding Plan</option>
         </select>
       </label>
       <label class="field">渲染模式
@@ -133,8 +132,7 @@ textarea.config { height:52px; }
 "use strict";
 var PAGE_DEFAULT_PAYLOAD = {
   custom: null,   // 启动时填充
-  weather: null,
-  coding: null
+  weather: null
 };
 var pagePayloads = {};   // 各页当前编辑中的 payload
 var DEMO_WEATHER_JSON = {
@@ -151,13 +149,8 @@ var DEMO_WEATHER_JSON = {
   ],
   error: ""
 };
-var DEMO_CODING_JSON = {
-  name: "GLM Coding Plan", ok: true, used: 123.4, total: 500,
-  reset: "2026-10-01", error: ""
-};
 
 var $ = function (id) { return document.getElementById(id); };
-var renderTimer = null;
 
 function currentReq() {
   var req = {
@@ -167,7 +160,7 @@ function currentReq() {
     inches: parseFloat($("inches").value) || 0
   };
   var mode = $("mode").value;
-  if (req.page === "custom" || req.page === "weather" || req.page === "coding") {
+  if (req.page === "custom" || req.page === "weather") {
     if (mode === "code") {
       req.code = $("code").value;
       try { req.config = JSON.parse($("modconfig").value || "{}"); }
@@ -182,7 +175,7 @@ function currentReq() {
 
 function doRender() {
   var req = currentReq();
-  var needPayload = (req.page === "custom" || req.page === "weather" || req.page === "coding")
+  var needPayload = (req.page === "custom" || req.page === "weather")
                     && $("mode").value === "payload";
   if (needPayload) {
     try { JSON.parse($("payload").value || "{}"); }
@@ -222,7 +215,7 @@ function scheduleRender() {
 
 function syncMode() {
   var mode = $("mode").value;
-  var editable = $("page").value === "custom" || $("page").value === "weather" || $("page").value === "coding";
+  var editable = $("page").value === "custom" || $("page").value === "weather";
   $("sec-payload").classList.toggle("hidden", mode !== "payload" || !editable);
   $("sec-code").classList.toggle("hidden", mode !== "code");
   $("status").textContent = editable ? "就绪" : "该页面为内置渲染（切换到自定义模组可编辑）";
@@ -241,18 +234,17 @@ function boot() {
     text: "编辑左侧 payload，右侧实时渲染"
   };
   PAGE_DEFAULT_PAYLOAD.weather = DEMO_WEATHER_JSON;   // 天气页内置演示数据
-  PAGE_DEFAULT_PAYLOAD.coding = DEMO_CODING_JSON;
 
   $("payload").value = JSON.stringify(PAGE_DEFAULT_PAYLOAD.custom, null, 2);
   $("code").value = DEFAULT_CODE_PLACEHOLDER;
   $("mode").addEventListener("change", function () { syncMode(); doRender(); });
   $("page").addEventListener("change", function () {
     var p = this.value;
-    if ((p === "custom" || p === "weather" || p === "coding")
+    if ((p === "custom" || p === "weather")
         && $("mode").value === "payload") {
       if (!pagePayloads[p]) {
         pagePayloads[p] = p === "custom" ? PAGE_DEFAULT_PAYLOAD.custom
-          : p === "weather" ? DEMO_WEATHER_JSON : DEMO_CODING_JSON;
+          : DEMO_WEATHER_JSON;
       }
       $("payload").value = JSON.stringify(pagePayloads[p], null, 2);
     }
@@ -262,7 +254,7 @@ function boot() {
   ["payload", "code", "modconfig"].forEach(function (id) {
     $(id).addEventListener("input", function () {
       var p = $("page").value;
-      if (id === "payload" && (p === "custom" || p === "weather" || p === "coding")) {
+      if (id === "payload" && (p === "custom" || p === "weather")) {
         try { pagePayloads[p] = JSON.parse($("payload").value); } catch (e) { /* 打错字时不覆盖 */ }
       }
       scheduleRender();

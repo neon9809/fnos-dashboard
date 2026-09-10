@@ -19,10 +19,11 @@ import threading
 import time
 import urllib.request
 
-API_STATUS = "http://127.0.0.1:8199/api/status"
-API_MODULES = "http://127.0.0.1:8199/api/modules"
+# WMO_TEXT / WMO_EN 与 dashboard 后端共用一份正本（dash_modules）
+from dash_modules import WMO_EN, WMO_TEXT
 
 # 与 Web 端 style.css 保持一致的 6 套主题调色板
+# （bg = style.css 各主题的 --bg1；新增主题时三处需同步：style.css / web js THEMES / 此处）
 PALETTES = {
     "midnight": {"bg": "#0a1322", "text": "#e8eefb", "dim": "#93a5c4",
                  "accent": "#3b82f6", "warn": "#f59e0b", "danger": "#f87171",
@@ -44,21 +45,8 @@ PALETTES = {
                  "down": "#059669", "up": "#d97706"},
 }
 
-WEEKDAY_ZH = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 WEEKDAY_EN = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 WEEKDAY_ZH_SHORT = ("一", "二", "三", "四", "五", "六", "日")
-WMO_TEXT = {
-    0: "晴", 1: "多云", 2: "局部多云", 3: "阴", 45: "雾", 48: "雾凇",
-    51: "小毛雨", 53: "毛雨", 55: "大毛雨", 61: "小雨", 63: "中雨", 65: "大雨",
-    66: "冻雨", 67: "强冻雨", 71: "小雪", 73: "中雪", 75: "大雪", 77: "霰",
-    80: "阵雨", 81: "中阵雨", 82: "强阵雨", 85: "小阵雪", 86: "大阵雪",
-    95: "雷阵雨", 96: "雷雨伴冰雹", 99: "强雷雨伴冰雹",
-}
-WMO_EN = {0: "SUNNY", 1: "M.CLD", 2: "P.CLD", 3: "CLOUDY", 45: "FOG", 48: "FOG",
-          51: "DRIZ", 53: "DRIZ", 55: "DRIZ", 61: "RAIN", 63: "RAIN", 65: "RAIN",
-          66: "SLEET", 67: "SLEET", 71: "SNOW", 73: "SNOW", 75: "SNOW", 77: "SNOW",
-          80: "SHWR", 81: "SHWR", 82: "SHWR", 85: "SNOW", 86: "SNOW",
-          95: "STORM", 96: "STORM", 99: "STORM"}
 
 # 内置 5x7 ASCII 字体（公有领域字形数据），用于无 PIL 环境的回退渲染
 FONT5X7 = {
@@ -400,10 +388,30 @@ class AsciiCanvas:
         scale = max(1, int(round(size / 14.0)))
         return len(str(s)) * 6 * scale
 
+    def ink_center_offset(self, s, size):
+        # ASCII 字形为等宽点阵，墨迹中心即字框中心
+        return 0.0, 0.0
+
     def to_bgra(self, rotate=0):
-        if rotate:
-            print("[fb] ASCII 回退模式不支持旋转，已忽略", flush=True)
-        return bytes(self.buf)
+        """输出 fb 尺寸的 BGRA。旋转 90/270 时画布为竖版 (h, w)，
+        此处把像素重排回 fb 的横版行宽（此前忽略 rotate 会导致花屏）。"""
+        if not rotate:
+            return bytes(self.buf)
+        w, h = self.w, self.h
+        # 以 4 字节像素为单元做行列重排，全部走 C 级切片
+        px = memoryview(self.buf).cast("I")
+        out = bytearray()
+        if rotate == 90:                       # 逆时针：目标行 = 源列自上而下
+            for dy in range(w):
+                out += px[w - 1 - dy::w].tobytes()
+        elif rotate == 180:                    # 目标行 = 源行像素倒序
+            for dy in range(h):
+                base = (h - 1 - dy) * w
+                out += px[base:base + w][::-1].tobytes()
+        else:                                  # 270：目标行 = 源列自下而上
+            for dy in range(w):
+                out += px[dy::w][::-1].tobytes()
+        return bytes(out)
 
 
 # --------------------------------------------------------------------------
@@ -559,13 +567,20 @@ class Renderer:
                            anchor="mm")
             gy += 66 * s
 
-    def page_weather(self, w, pal, ascii_mode):
+    def page_weather(self, w, pal, ascii_mode=False):
+        """天气页入口：按数据源分发（两者返回结构不同，布局也不同）。"""
+        if str(w.get("provider")) == "open-meteo" or \
+                (not w.get("hourly") and w.get("current") is not None):
+            self.page_weather_openmeteo(w, pal, ascii_mode)
+        else:
+            self.page_weather_qweather(w, pal)
+
+    def page_weather_qweather(self, w, pal):
         """和风天气布局：当前小时大字 + 逐小时列表 + 生活指数（过敏指数高亮）。"""
         s = self.s
         c = self.c
         W = self.W
         lx = 36 * s
-        track = blend(pal["bg"], pal["dim"], 0.35)
         c.text(lx, 110 * s, str(w.get("city", ""))[:12], 44 * s, pal["text"])
         if w.get("error"):
             c.text(lx, 180 * s, "ERROR: %s" % w["error"][:30], 24 * s,
@@ -613,29 +628,46 @@ class Renderer:
                 iy += 30 * s
             iy += 52 * s
 
-    def page_coding(self, m, pal):
+    def page_weather_openmeteo(self, w, pal, ascii_mode=False):
+        """Open-Meteo 布局：当前温度大字 + 未来几日预报（WMO 天气码翻译）。"""
         s = self.s
         c = self.c
         W = self.W
         lx = 36 * s
-        track = blend(pal["bg"], pal["dim"], 0.35)
-        c.text(lx, 120 * s, str(m.get("name", ""))[:24], 44 * s, pal["text"])
-        if not m.get("ok"):
-            c.text(lx, 210 * s, m.get("error") or "NOT CONFIGURED", 28 * s,
+        c.text(lx, 110 * s, str(w.get("city", ""))[:12], 44 * s, pal["text"])
+        if w.get("error"):
+            c.text(lx, 180 * s, "ERROR: %s" % w["error"][:30], 24 * s,
                    pal["danger"])
             return
-        used = m.get("used")
-        total = m.get("total")
-        c.text(lx, 260 * s, human_num(used), 120 * s, pal["accent"])
-        if total:
-            c.text(lx, 420 * s, "/ %s" % human_num(total), 44 * s, pal["dim"])
-            frac = max(0.0, min(1.0, used / total)) if total else 0
-            col = pal["accent"] if frac < 0.8 else pal["warn"]
-            self.bar(lx, 500 * s, W - lx * 2, 24 * s, frac, col, track)
-            c.text(W - lx, 550 * s, "%.1f%%" % (frac * 100), 36 * s,
-                   pal["text"], anchor="rt")
-        if m.get("reset"):
-            c.text(lx, 560 * s, "RESET %s" % m["reset"], 26 * s, pal["dim"])
+        cur = w.get("current") or {}
+        temp = cur.get("temp")
+        code = cur.get("code")
+        text = WMO_EN.get(code, "--") if ascii_mode else WMO_TEXT.get(code, "--")
+        c.text(lx, 190 * s, "NOW", 22 * s, pal["dim"])
+        c.text(lx, 230 * s, "%d" % round(temp) if temp is not None else "--",
+               150 * s, pal["accent"])
+        c.text(lx, 410 * s, str(text)[:8], 36 * s, pal["text"])
+        c.text(lx, 470 * s, "OPEN-METEO", 22 * s, pal["dim"])
+        # 右侧未来几日预报
+        rx = W * 0.55
+        c.text(rx, 190 * s, "DAILY" if ascii_mode else "未来几日",
+               24 * s, pal["dim"])
+        y = 236 * s
+        for d in (w.get("daily") or [])[:5]:
+            try:
+                wd = datetime.date.fromisoformat(
+                    str(d.get("date", ""))[:10]).weekday()
+                label = WEEKDAY_EN[wd] if ascii_mode else WEEKDAY_ZH_SHORT[wd]
+            except ValueError:
+                label = str(d.get("date", ""))[:10]
+            dtext = WMO_EN.get(d.get("code"), "--") if ascii_mode \
+                else WMO_TEXT.get(d.get("code"), "--")
+            c.text(rx, y, label, 24 * s, pal["dim"])
+            c.text(rx + 130 * s, y, str(dtext)[:6], 24 * s, pal["text"])
+            c.text(W - lx, y, "%d°/%d°" % (round(d.get("max") or 0),
+                                           round(d.get("min") or 0)),
+                   24 * s, pal["text"], anchor="rt")
+            y += 46 * s
 
     def page_ext(self, payload, pal):
         """扩展模组通用布局：title/subtitle/lines/bars/text。"""
@@ -702,15 +734,6 @@ def human_bytes(n):
             return "%.0f%s" % (n, u) if u != "B" else "%dB" % n
         n /= 1024
     return "%.1fPB" % n
-
-
-def human_num(n):
-    n = float(n or 0)
-    for u in ("", "K", "M", "G"):
-        if n < 1000:
-            return "%.1f%s" % (n, u) if u else "%d" % n
-        n /= 1000
-    return "%.1fT" % n
 
 
 # --------------------------------------------------------------------------
@@ -781,6 +804,7 @@ def main():
     # PIL 画布按显示方向复用：90/270 时用竖版画布，转置后与 fb 尺寸一致
     rotate = 0
     canvas_w, canvas_h = W, H
+    last_frame = None
     while True:
         now = time.time()
         status, modules, offline = fetcher.status, fetcher.modules, fetcher.offline
@@ -800,6 +824,7 @@ def main():
             except Exception as e:
                 canvas = AsciiCanvas(canvas_w, canvas_h)
                 print("[fb] 重建画布失败：%s" % e, flush=True)
+            last_frame = None
 
         mods = cfg.get("modules") or {}
         pages = ["system"]
@@ -822,30 +847,34 @@ def main():
         else:
             ui_scale = max(0.6, res_scale)
 
-        canvas.begin(pal["bg"])
-        r = Renderer(canvas, canvas_w, canvas_h, ui_scale)
-        r.header(pal, (status or {}).get("host", {}).get("hostname", "fnOS"),
-                 datetime.datetime.now(), offline,
-                 page_name="" if len(pages) == 1 else "%d/%d" % (idx + 1, len(pages)))
-        page = pages[idx]
-        if page == "system":
-            r.page_system(status or {}, pal)
-        elif page == "calendar" and modules.get("calendar"):
-            r.page_calendar(modules["calendar"], pal, canvas.name == "ascii")
-        elif page == "weather" and modules.get("weather"):
-            wp = modules.get("weather") or {}
-            if wp.get("hourly"):     # 和风天气结构
-                r.page_weather_qweather(wp, pal)
-            else:
-                r.page_weather(wp, pal, canvas.name == "ascii")
-        elif page == "coding" and modules.get("coding"):
-            r.page_coding(modules.get("coding") or {}, pal)
-        elif page.startswith("ext:"):
-            payload = ext_data.get(page[4:]) or {}
-            r.page_ext(payload, pal)
-        r.footer(pal, pages, idx, rotate_sec)
-        fb.blit(canvas.to_bgra(rotate))
-        time.sleep(1.0)
+        # 单页绘制异常只丢弃本帧，绝不退出渲染进程
+        try:
+            canvas.begin(pal["bg"])
+            r = Renderer(canvas, canvas_w, canvas_h, ui_scale)
+            r.header(pal, (status or {}).get("host", {}).get("hostname", "fnOS"),
+                     datetime.datetime.now(), offline,
+                     page_name="" if len(pages) == 1 else "%d/%d" % (idx + 1, len(pages)))
+            page = pages[idx]
+            if page == "system":
+                r.page_system(status or {}, pal)
+            elif page == "calendar" and modules.get("calendar"):
+                r.page_calendar(modules["calendar"], pal, canvas.name == "ascii")
+            elif page == "weather" and modules.get("weather"):
+                r.page_weather(modules.get("weather") or {}, pal,
+                               canvas.name == "ascii")
+            elif page.startswith("ext:"):
+                payload = ext_data.get(page[4:]) or {}
+                r.page_ext(payload, pal)
+            r.footer(pal, pages, idx, rotate_sec)
+        except Exception as e:
+            print("[fb] 页面绘制异常：%r" % e, flush=True)
+
+        frame = canvas.to_bgra(rotate)
+        if frame != last_frame:          # 内容未变时跳过整帧写屏
+            fb.blit(frame)
+            last_frame = frame
+        # 对齐到整秒边界，避免重绘相位漂移
+        time.sleep(max(0.05, 1.0 - (time.time() - now)))
 
 
 if __name__ == "__main__":

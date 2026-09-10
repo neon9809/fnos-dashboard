@@ -1,5 +1,5 @@
 #!/bin/bash
-# 卸载后：清理应用进程残留
+# 卸载后：清理应用进程残留（含 fb 渲染进程兜底）
 APP_NAME="${TRIM_APPNAME:-com.fnos.dashboard}"
 VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
 PID_FILE="${VAR_DIR}/app.pid"
@@ -12,6 +12,25 @@ if [ -f "$PID_FILE" ]; then
     rm -f "$PID_FILE"
 fi
 
-# 移除显示器模式使用的 udev 规则
-rm -f /etc/udev/rules.d/99-fnos-dashboard-fb.rules 2>/dev/null
+# 兜底清理显示器渲染进程：系统卸载前可能未经 main stop，
+# 且 pid 文件可能过期，故按进程表匹配 cmdline 全量清理
+kill_renderers() {
+    local sig="$1"
+    for d in /proc/[0-9]*; do
+        [ -r "$d/cmdline" ] || continue
+        cmd=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *fb_render.py*) kill -"$sig" "${d#/proc/}" 2>/dev/null || true ;;
+        esac
+    done
+}
+kill_renderers TERM
+sleep 1
+kill_renderers KILL
+
+# 移除显示器模式使用的 udev 规则（恢复 framebuffer 系统默认权限）
+if rm -f /etc/udev/rules.d/99-fnos-dashboard-fb.rules 2>/dev/null; then
+    echo "已移除 udev 规则 99-fnos-dashboard-fb.rules（framebuffer 权限恢复系统默认，重启后完全生效）" \
+        > "${TRIM_TEMP_LOGFILE}" 2>/dev/null || true
+fi
 exit 0

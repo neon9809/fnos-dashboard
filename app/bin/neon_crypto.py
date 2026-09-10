@@ -102,6 +102,11 @@ def verify(public_raw, signature, message):
         return False
     try:
         A = _decodepoint(public_raw)
+        # 拒绝小阶公钥点（单位元 / 2·4·8 阶）：不在素数阶子群的公钥
+        # 可构造小阶等价点伪造「有效」签名（cofactor 攻击面）。
+        # _mult 结果是射影坐标，须规范化后与单位元比较
+        if _encodepoint(_mult(A, 8)) == _encodepoint(_IDENT):
+            return False
         rs = signature[:32]
         s = int.from_bytes(signature[32:], "little")
         if s >= __l:

@@ -1,13 +1,15 @@
 /* 设置页逻辑：左配置右预览，保存后 POST /api/settings 同步到显示屏 */
 "use strict";
 
+/* 主题色板正本在 style.css 的 body[data-theme] 变量：
+   bg = 各主题 --bg1（与 fb_render.PALETTES 一致），accent = 默认强调色 */
 var THEMES = [
   { id: "midnight", name: "午夜蓝", bg: "#0a1322", accent: "#3b82f6" },
-  { id: "graphite", name: "石墨黑", bg: "#171b22", accent: "#2dd4bf" },
-  { id: "emerald",  name: "翡翠绿", bg: "#0b3226", accent: "#34d399" },
-  { id: "solar",    name: "日光橙", bg: "#2b1c08", accent: "#f59e0b" },
-  { id: "sakura",   name: "樱粉",   bg: "#ffffff", accent: "#ec4899" },
-  { id: "light",    name: "云白",   bg: "#ffffff", accent: "#2563eb" }
+  { id: "graphite", name: "石墨黑", bg: "#0e1013", accent: "#2dd4bf" },
+  { id: "emerald",  name: "翡翠绿", bg: "#04231a", accent: "#34d399" },
+  { id: "solar",    name: "日光橙", bg: "#1c1204", accent: "#f59e0b" },
+  { id: "sakura",   name: "樱粉",   bg: "#fdf1f6", accent: "#ec4899" },
+  { id: "light",    name: "云白",   bg: "#f1f4f9", accent: "#2563eb" }
 ];
 var PRESET_ACCENTS = [
   "#3b82f6", "#22d3ee", "#2dd4bf", "#34d399", "#a3e635", "#facc15",

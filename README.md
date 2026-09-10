@@ -31,8 +31,7 @@
 | 模组 | 说明 | 数据来源 |
 |------|------|----------|
 | 日历 | 当月月历 + 今日高亮 + 大字时钟 | 本地计算 |
-| 天气预报 | 实时温度/天气 + 逐小时预报 + 生活指数（**花粉过敏指数**等 10 种可选），城市/位置可配置 | **和风天气**（需 API Key，`dev.qweather.com` 注册；免费 Open-Meteo 兜底） |
-| Coding Plan 用量 | 订阅额度使用进度条 | 通用 HTTP 探针：配置 JSON 接口 URL / Bearer Token / 已用与总额度的 JSON 路径 / 重置日期 |
+| 天气预报 | 实时温度/天气 + 未来几日预报（Open-Meteo）；逐小时预报 + 生活指数含**花粉过敏指数**等 10 种可选（和风天气），城市/位置可配置 | **和风天气**（需 API Key，`dev.qweather.com` 注册；免费 Open-Meteo 兜底） |
 
 **扩展模组（.neon-dash）**：社区/自定义模组以 `.neon-dash`（ZIP）包安装，
 包含 `manifest.json` + Python 入口 `mod.py`（实现 `get_payload(config)` 返回通用渲染数据）。
@@ -60,23 +59,24 @@
 fnos-dashboard/
 ├── app/                    # 打包后 → target（TRIM_APPDEST）
 │   ├── bin/
-│   │   ├── dashboard.py    # 后端：采集 + API + 静态页（纯 Python 标准库）
+│   │   ├── dashboard.py    # 后端入口：装配各模块并启动 HTTP 服务
+│   │   ├── dash_config.py  # 配置读写与白名单校验
+│   │   ├── dash_stats.py   # /proc 系统状态采集
+│   │   ├── dash_modules.py # 日历/天气模组 + .neon-dash 扩展模组
+│   │   ├── dash_http.py    # HTTP API 与静态页
 │   │   ├── fb_render.py    # 显示器渲染器（/dev/fb0，轮换翻页 + 旋转）
 │   │   ├── neon_crypto.py  # .neon-dash 签名验证（纯标准库 ed25519）
-│   │   └── *.neon-dash     # 官方预装模组（mock / volc-plan / glm-plan）
+│   │   └── *.neon-dash     # 官方预装模组（volc-plan / glm-plan）
 │   ├── web/                # Web 面板 + 设置页（原生 HTML/CSS/JS，无构建依赖）
+│   │   └── images/         # 页面 logo / favicon（icon-64.png）
 │   └── ui/                 # 桌面图标配置（desktop_uidir）
 │       ├── images/icon-{64,256}.png
 │       └── config
 ├── neon-dash/              # 模组开发者套件
-│   ├── ndash.py            # 打包/签名/验证一体工具
-│   ├── MODULE_SPEC.md      # 模组开发规范
-│   ├── keys/neon.pub       # 官方签名者公钥（内置信任）
-│   └── sign/README.md      # 签名机制说明与操作方法
 ├── cmd/                    # FPK 生命周期脚本（main / install / uninstall / upgrade / config）
-├── config/                 # privilege（run-as package）+ resource
+├── config/                 # privilege（run-as package + video 组）+ resource
 ├── wizard/                 # 安装向导 / 配置向导（主题、刷新间隔、温度单位）
-├── tools/                  # 图标生成器等
+├── tools/                  # 图标生成器、FPK 打包、模组签名等
 ├── manifest                # com.fnos.dashboard, platform=all, service_port=8199
 ├── build.sh                # 构建入口
 ├── ICON.PNG / ICON_256.PNG # 由 build.sh 生成
@@ -85,7 +85,8 @@ fnos-dashboard/
 ## 构建与安装
 
 ```bash
-./build.sh        # 图标 + 官方模组打包签名（需本机私钥）+ 赋权 + （若安装了 fnpack）打包 .fpk
+export NDASH_KEY=/path/to/neon-dash.secret   # 官方模组签名私钥（必填，不再内置默认路径）
+./build.sh        # 图标 + 官方模组打包签名 + 赋权 + （若安装了 fnpack）打包 .fpk
 ```
 
 ### CI 构建（GitHub Actions）
@@ -103,8 +104,10 @@ fnos-dashboard/
 ## 显示器模式的系统适配
 
 1. **权限**：安装脚本（root 阶段）写入 udev 规则
-   `/etc/udev/rules.d/99-fnos-dashboard-fb.rules`（`SUBSYSTEM=="graphics"` MODE 0666）
-   并对当前开机立即 `chmod 666 /dev/fb0`，使 package 用户可写 framebuffer；卸载时移除。
+   `/etc/udev/rules.d/99-fnos-dashboard-fb.rules`（`SUBSYSTEM=="graphics"` +
+   `GROUP="video"` + MODE 0660，仅 video 组可写），并对当前开机立即
+   `chgrp video /dev/fb0 && chmod 660`；卸载时移除该规则并恢复系统默认权限。
+   应用账户经 `config/privilege` 的 `join-groups: ["video"]` 获得写权限。
 2. **中文渲染**：`apt install python3-pil` 后自动使用系统字体
    （拉丁：Noto Sans Mono / DejaVu；CJK：DroidSansFallback）。
    未安装 PIL 时自动回退内置 5x7 ASCII 字体（系统页完整可用，中文模组显示受限）。
@@ -112,6 +115,14 @@ fnos-dashboard/
    默认按 `min(W/1280, H/800)` 缩放，配置屏幕英寸后按 `对角线像素/英寸` 估算 PPI 再修正。
 4. **数据流**：渲染器仅依赖 `http://127.0.0.1:8199/api/*`，后台线程拉取（天气等慢接口不阻塞绘制），
    后端离线时保持最后画面并显示 OFFLINE 徽标。
+
+## 访问与安全模型
+
+- **桌面入口（设置页）仅管理员可见**（`ui/config` 中 `allUsers: false`）：
+  模组安装意味着以应用身份执行代码、可修改和风天气等敏感配置，须限制为管理员操作。
+- 设置页与管理接口在服务端**仅限 127.0.0.1**：桌面入口经 fnOS 校验 NAS 登录态后由
+  `index.cgi`（CGI 反代，curl `--max-time 30`）回源本机服务，远程/局域网直连一律 403。
+- 局域网内任何人都可打开只读面板 `http://<nas>:8199/`（无敏感配置，API Key 自动掩码）。
 
 ## API
 
@@ -137,13 +148,13 @@ fnos-dashboard/
 {
   "theme": "midnight", "accent": "", "refresh": 2, "temp_unit": "C",
   "fb_enabled": true, "rotate_seconds": 10, "screen_inches": 0, "fb_rotate": 0,
-  "modules": { "calendar": true, "weather": true, "coding": false },
+  "modules": { "calendar": true, "weather": true },
   "weather_city": "北京",
-  "coding": { "name": "", "url": "", "token": "",
-              "path_used": "", "path_total": "", "reset": "" },
   "ext_modules": { "volc-plan": { "enabled": true, "config": { "plan_type": "coding" } } }
 }
 ```
+
+提示：在 `TRIM_PKGVAR/config.json` 放置同名文件可整体覆盖 etc 配置（手动覆盖通道）。
 
 ## 已在真实 fnOS 上验证 （v1.2.0604）
 

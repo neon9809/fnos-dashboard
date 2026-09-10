@@ -6,7 +6,7 @@
             "type": "iframe",
             "protocol": "http",
             "url": "/cgi/ThirdParty/com.fnos.dashboard/index.cgi/settings",
-            "allUsers": true
+            "allUsers": false
         }
     }
 }

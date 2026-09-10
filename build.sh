@@ -1,17 +1,20 @@
 #!/bin/bash
 # fnOS 状态监视 —— 构建与打包脚本
 # 用法：./build.sh   （可选 fnpack 存在时自动打包 .fpk）
+# 官方模组签名需要私钥：export NDASH_KEY=/path/to/neon-dash.secret
 set -e
 cd "$(dirname "$0")"
+
+: "${NDASH_KEY:?请先 export NDASH_KEY=<ed25519 签名私钥文件路径>（不写入任何默认路径）}"
 
 echo "[1/4] 生成应用图标..."
 python3 tools/make_icons.py
 
 echo "[2/4] 打包官方模组..."
 python3 neon-dash/ndash.py pack neon-dash/example/volc-plan -o app/bin/volc-plan.neon-dash
-python3 neon-dash/ndash.py sign app/bin/volc-plan.neon-dash --key "${NDASH_KEY:-/Users/neon/Documents/neon-dash.secret}" --signer neon
+python3 neon-dash/ndash.py sign app/bin/volc-plan.neon-dash --key "$NDASH_KEY" --signer neon
 python3 neon-dash/ndash.py pack neon-dash/example/glm-plan -o app/bin/glm-plan.neon-dash
-python3 neon-dash/ndash.py sign app/bin/glm-plan.neon-dash --key "${NDASH_KEY:-/Users/neon/Documents/neon-dash.secret}" --signer neon
+python3 neon-dash/ndash.py sign app/bin/glm-plan.neon-dash --key "$NDASH_KEY" --signer neon
 
 echo "[3/4] 设置脚本执行权限..."
 chmod +x build.sh cmd/* app/bin/*.py tools/*.py

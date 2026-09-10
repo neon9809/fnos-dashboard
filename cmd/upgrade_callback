@@ -5,6 +5,9 @@ ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
 VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
 CFG_FILE="${ETC_DIR}/config.json"
 
+# manifest 声明了 install_dep_apps=python312：优先使用打包运行时，缺失时回退系统 python3
+[ -d /var/apps/python312/target/bin ] && export PATH="/var/apps/python312/target/bin:$PATH"
+
 mkdir -p "$ETC_DIR" "$VAR_DIR"
 
 if [ ! -f "$CFG_FILE" ]; then
@@ -21,12 +24,19 @@ cfg = {
         "cpu": True, "memory": True, "disk": True,
         "network": True, "temperature": True, "info": True,
     },
-    "saved_at": 0,
 }
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w", encoding="utf-8") as f:
     json.dump(cfg, f, ensure_ascii=False, indent=2)
 PY
+fi
+
+# 升级可能覆盖应用文件：重写 udev 规则，确保权限模型为 video 组 0660（旧版为 0666）
+if [ "$(id -u)" = "0" ] && [ -e /dev/fb0 ]; then
+    RULE="/etc/udev/rules.d/99-fnos-dashboard-fb.rules"
+    echo 'SUBSYSTEM=="graphics", KERNEL=="fb*", GROUP="video", MODE="0660"' \
+        > "$RULE" 2>/dev/null || true
+    udevadm control --reload-rules 2>/dev/null || true
 fi
 
 if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME}" ]; then
