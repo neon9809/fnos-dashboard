@@ -77,6 +77,7 @@ fnos-dashboard/
 ├── config/                 # privilege（run-as package + video 组）+ resource
 ├── wizard/                 # 安装向导 / 配置向导（主题、刷新间隔、温度单位）
 ├── tools/                  # 图标生成器、FPK 打包、模组签名等
+├── CONTRIBUTING.md         # 参与开发指南（架构 / 环境 / 自检 / PR 流程）
 ├── manifest                # com.fnos.dashboard, platform=all, service_port=8199
 ├── build.sh                # 构建入口
 ├── ICON.PNG / ICON_256.PNG # 由 build.sh 生成
@@ -100,6 +101,21 @@ export NDASH_KEY=/path/to/neon-dash.secret   # 官方模组签名私钥（必填
 本地预览（无需 fnOS）：`python3 app/bin/dashboard.py --port 8199 --web app/web`
 - fnOS 安装后自动创建 `com.fnos.dashboard` 桌面图标，点击打开 Web 面板
 - 显示器模式：在 Web 面板「设置 → 显示器模式」开启；`cmd/main` 会在启动时拉起 `fb_render.py`
+
+## 参与开发 🤝
+
+**欢迎加入本项目开发，非常期待你的 Pull Request！** 无论后端功能、显示器页面、前端体验、
+新模组还是文档改进，都是有价值的贡献。
+
+- **开发文档**：[CONTRIBUTING.md](CONTRIBUTING.md) —— 面向整个项目的架构总览、开发环境、
+  各模块开发要点、提交前自检清单与 PR 流程
+- **模组开发**：[neon-dash/MODULE_SPEC.md](neon-dash/MODULE_SPEC.md) +
+  [preview.py](neon-dash/preview.py) 实时预览器，十分钟写一个自己的显示器模组
+- **快速上手**：纯 Python 标准库 + 原生 JS，零构建依赖，clone 后一条命令即可本地跑通
+- 良好的第一个任务方向：显示器新页面 / 天气与模组增强 / 主题与前端打磨 / 文档与测试补全
+
+PR 前请过一遍 [CONTRIBUTING.md](CONTRIBUTING.md) 的自检清单（编译 / 语法 / 打包可复现），
+有问题随时开 Issue 讨论。
 
 ## 显示器模式的系统适配
 
