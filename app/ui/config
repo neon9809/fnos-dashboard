@@ -7,7 +7,7 @@
             "protocol": "",
             "gatewayPrefix": "/app/fnos-dashboard",
             "gatewaySocket": "app.sock",
-            "url": "/app/fnos-dashboard/settings",
+            "url": "/app/fnos-dashboard",
             "allUsers": true
         }
     }

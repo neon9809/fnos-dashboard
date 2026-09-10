@@ -1498,6 +1498,12 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         rel = path if path != "/" else "/index.html"
+        if path == "/":
+            # 图标经统一网关打开根路径时直接进入设置页；?panel=1 或
+            # TCP 直连（NAS 本机 / 局域网）仍是只读面板
+            if getattr(self.server, "gateway", False) and \
+                    "panel" not in self.path:
+                return self._serve_static("/settings.html")
         self._serve_static(rel)
 
     # ---- POST / DELETE ----
