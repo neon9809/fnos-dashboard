@@ -1333,18 +1333,51 @@ class Handler(BaseHTTPRequestHandler):
     def _fb_restart(self):
         """设置变更后重启显示器渲染进程（启用时拉起，关闭时仅清理）。"""
         pid_file = os.path.join(self.var_dir, "fb.pid")
-        try:
-            with open(pid_file) as f:
-                old = int(f.read().strip())
-            os.kill(old, signal.SIGTERM)
-            for _ in range(15):
-                if not _pid_alive(old):
-                    break
-                time.sleep(0.1)
-            if _pid_alive(old):
-                os.kill(old, signal.SIGKILL)
-        except (OSError, ValueError):
-            pass
+
+        def _scan_renderers():
+            # pid 文件可能过期（手动拉起/升级遗留），按进程表全量清理
+            found = []
+            me = os.getpid()
+            try:
+                names = os.listdir("/proc")
+            except OSError:
+                return found
+            for name in names:
+                if not name.isdigit() or int(name) == me:
+                    continue
+                try:
+                    with open("/proc/%s/cmdline" % name, "rb") as f:
+                        cmd = f.read().replace(b"\x00", b" ").decode(
+                            "utf-8", "replace")
+                except OSError:
+                    continue
+                if "fb_render.py" in cmd:
+                    found.append(int(name))
+            return found
+
+        def _reap():
+            try:
+                os.waitpid(-1, os.WNOHANG)
+            except (ChildProcessError, OSError):
+                pass
+
+        for pid in _scan_renderers():
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            _reap()
+            if not _scan_renderers():
+                break
+            time.sleep(0.1)
+        for pid in _scan_renderers():
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        _reap()
         try:
             os.unlink(pid_file)
         except OSError:

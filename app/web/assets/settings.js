@@ -22,6 +22,20 @@ var VERIFY_BADGE = {
   untrusted: ["untrusted", "⚠ 未知签名者"],
   unsigned: ["unsigned", "未签名"]
 };
+var QWEATHER_MASK = "••••••••";
+var QWEATHER_INDICES = [
+  { id: "1",  name: "穿衣" },
+  { id: "2",  name: "洗车" },
+  { id: "3",  name: "旅游" },
+  { id: "4",  name: "感冒" },
+  { id: "5",  name: "运动" },
+  { id: "6",  name: "紫外线" },
+  { id: "7",  name: "花粉过敏" },
+  { id: "8",  name: "舒适度" },
+  { id: "9",  name: "交通" },
+  { id: "10", name: "钓鱼" },
+  { id: "11", name: "防晒" }
+];
 
 var state = null;   // 可编辑配置副本
 var previewTimer = null;
@@ -155,7 +169,7 @@ function renderFbInfo(info) {
     : '<span class="bad">未安装</span>（apt install python3-pil）'));
   lines.push("渲染进程：" + (info.renderer_running
     ? '<span class="ok">运行中</span>'
-    : '<span class="bad">未运行</span>（保存后重启应用生效）'));
+    : '<span class="bad">未运行</span>（保存设置后会自动拉起；若仍不显示请检查日志）'));
   el.innerHTML = lines.join("<br>");
 }
 
@@ -163,13 +177,19 @@ function renderFbInfo(info) {
 function bindBuiltinMods() {
   document.getElementById("mod-calendar").checked = !!state.modules.calendar;
   document.getElementById("mod-weather").checked = !!state.modules.weather;
-  document.getElementById("mod-weather").checked = !!state.modules.weather;
   document.getElementById("set-city").value = state.weather_city;
   document.getElementById("set-wprovider").value = state.weather_provider || "open-meteo";
   document.getElementById("set-qhost").value = state.qweather_host || "devapi.qweather.com";
   document.getElementById("set-qkey").value = state.qweather_key ? QWEATHER_MASK : "";
   document.getElementById("set-wloc").value = state.weather_location;
+  renderQweatherFields();
   renderIndexCheckboxes();
+}
+
+function renderQweatherFields() {
+  var box = document.getElementById("qweather-fields");
+  if (!box) return;
+  box.classList.toggle("hidden", (state.weather_provider || "open-meteo") !== "qweather");
 }
 
 function renderIndexCheckboxes() {
@@ -463,7 +483,14 @@ function bindUI() {
   document.getElementById("mod-weather").addEventListener("change", function () {
     state.modules.weather = this.checked;
   });
-  [["set-city", function (v) { state.weather_city = v; }]
+  document.getElementById("set-wprovider").addEventListener("change", function () {
+    state.weather_provider = this.value;
+    renderQweatherFields();
+  });
+  [["set-city", function (v) { state.weather_city = v; }],
+   ["set-qhost", function (v) { state.qweather_host = v; }],
+   ["set-qkey", function (v) { state.qweather_key = v; }],
+   ["set-wloc", function (v) { state.weather_location = v; }]
   ].forEach(function (pair) {
     document.getElementById(pair[0]).addEventListener("change", function () {
       pair[1](this.value.trim());

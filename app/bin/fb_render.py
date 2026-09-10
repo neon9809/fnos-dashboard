@@ -10,6 +10,7 @@
 
 import argparse
 import datetime
+import fcntl
 import json
 import mmap
 import os
@@ -140,6 +141,12 @@ class FB:
                           int(open(stride_file).read().strip())
                           if os.path.exists(stride_file) else self.w * 4)
         self.fd = os.open(path, os.O_RDWR)
+        try:
+            # 文件锁保证同一帧缓冲只有一个渲染进程，防止双写导致画面冻结
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(self.fd)
+            raise RuntimeError("另一个渲染进程正在使用 " + path)
         self.mm = mmap.mmap(self.fd, self.stride * self.h)
         self._row = self.w * 4
 
@@ -753,7 +760,11 @@ def main():
     ap.add_argument("--interval", type=float, default=2.0)
     args = ap.parse_args()
 
-    fb = FB(args.fb)
+    try:
+        fb = FB(args.fb)
+    except RuntimeError as e:
+        print("[fb] %s" % e, flush=True)
+        return
     W, H = fb.w, fb.h
     print("[fb] %dx%d stride=%d" % (W, H, fb.stride), flush=True)
 
