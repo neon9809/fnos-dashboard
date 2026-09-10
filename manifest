@@ -1,5 +1,5 @@
 appname=com.fnos.dashboard
-version=1.1.0
+version=0.0.1
 display_name=状态监视
 desc=fnOS 系统状态监视面板：实时 CPU、内存、存储、网络与温度；HDMI/VGA 显示器直出（自动轮换、无需键鼠）；预装火山方舟 Plan / 智谱 GLM Coding Plan 用量模组；6 款主题 + 自定义强调色。设置页仅限 NAS 本机访问。
 platform=all
@@ -12,4 +12,4 @@ os_min_version=0.9.0
 desktop_uidir=ui
 desktop_applaunchname=com.fnos.dashboard.main
 ctl_stop=true
-changelog=1.1.0：新增显示器（/dev/fb0）直出模式与设置页；官方模组系统（火山方舟 Plan / GLM Coding Plan 用量，签名预装）；和风天气数据源与生活指数。
+changelog=beta-0.0.1：首个公开测试版。Web 面板 + 显示器直出 + 火山方舟/GLM Plan 用量模组。
