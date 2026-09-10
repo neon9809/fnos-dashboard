@@ -1629,9 +1629,9 @@ def main():
                                            os.path.normpath(os.path.join(here, "..", "var"))))
     ap.add_argument("--socket", default="",
                     help="统一网关 Unix Socket 路径（如 ${TRIM_APPDEST}/app.sock）")
-    ap.add_argument("--gateway-prefix",
-                    default="/app/" + os.environ.get("TRIM_APPNAME",
-                                                     "com.fnos.dashboard"))
+    ap.add_argument("--gateway-prefix", default="/app/fnos-dashboard",
+                    help="统一网关前缀（须与 ui/config 的 gatewayPrefix 一致，"
+                         "公开路径不允许点号）")
     args = ap.parse_args()
 
     var_dir = args.var

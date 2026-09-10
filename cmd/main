@@ -65,6 +65,7 @@ start_backend() {
         --config "$CFG_FILE" \
         --var "$VAR_DIR" \
         --socket "${APP_DIR}/app.sock" \
+        --gateway-prefix /app/fnos-dashboard \
         >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     sleep 2
