@@ -246,8 +246,9 @@ class PilCanvas:
             x += w
 
     def text_w(self, s, size):
-        scale = max(1, int(round(size / 14.0)))
-        return len(str(s)) * 6 * scale
+        # 真实字宽：ASCII 估宽公式在 truetype 下明显偏窄，% 等后缀会叠在数字上
+        return self.draw.textlength(
+            str(s), font=self._font(size, cjk=any(ord(ch) > 127 for ch in str(s))))
 
     def text_centered(self, cx, cy, s, size, color):
         """按 ink 边界精确居中（圆内数字等对齐敏感场景）。
@@ -480,12 +481,25 @@ class Renderer:
         self.big_pct(lx, 120 * s, cpu.get("usage"), "CPU", pal, size=88)
         cores = cpu.get("cores") or []
         if cores:
-            cw = 26 * s
-            gap = 6 * s
+            # 核心数不限：宽度按列宽自适应；超 64 核聚合为 64 桶均值
+            data = cores
+            if len(data) > 64:
+                size = -(-len(data) // 64)
+                data = [sum(data[i:i + size]) / len(data[i:i + size])
+                        for i in range(0, len(data), size)]
+            n = len(data)
+            gap = 6 * s if n <= 12 else (2 * s if n <= 32 else 1 * s)
+            cw = max(2 * s, (half - 24 * s - gap * (n - 1)) / n)
+            bh_max = int(52 * s)
+            radius = min(3 * s, cw / 2)
             bx = lx
-            for u in cores[:12]:
-                bh = int(52 * s * min(1.0, u / 100.0))
-                c.rect(bx, 300 * s - bh, cw, bh, pal["accent"], radius=3 * s)
+            for u in data:
+                bh = int(bh_max * min(1.0, max(0.0, u) / 100.0))
+                # 轨道底槽：空闲核也可见
+                c.rect(bx, 300 * s - bh_max, cw, bh_max, track, radius=radius)
+                if bh >= 1:
+                    c.rect(bx, 300 * s - bh, cw, bh, pal["accent"],
+                           radius=radius)
                 bx += cw + gap
         load = cpu.get("load") or [0, 0, 0]
         c.text(lx, 322 * s, "LOAD %.2f %.2f %.2f" % tuple(load[:3]), 22 * s, pal["dim"])
@@ -525,18 +539,21 @@ class Renderer:
         c.text(lx, y + 94 * s, "^ %s/s" % human_bytes(up), 34 * s, pal["up"])
 
         temps = (st.get("temps") or {})
-        cpu_t = temps.get("cpu_temp")
         sensors = temps.get("sensors") or []
         ty = y
         c.text(rx, ty, "TEMP", 24 * s, pal["dim"])
-        tcol = pal["accent"] if (cpu_t or 0) < 60 else \
-            (pal["warn"] if (cpu_t or 0) < 80 else pal["danger"])
-        c.text(rx, ty + 40 * s, "%.1fC" % cpu_t if cpu_t is not None else "--",
-               42 * s, tcol)
-        chip = sensors[0]["label"] if sensors else ""
-        c.text(rx + c.text_w("%.1fC" % cpu_t if cpu_t is not None else "--",
-                             42 * s) + 14 * s,
-               ty + 56 * s, chip[:12], 20 * s, pal["dim"])
+        ty += 40 * s
+        if not sensors:
+            c.text(rx, ty, "--", 34 * s, pal["dim"])
+        for sen in sensors[:5]:
+            tval = sen.get("celsius")
+            col = pal["accent"] if tval < 60 else \
+                (pal["warn"] if tval < 80 else pal["danger"])
+            c.text(rx, ty, str(sen.get("label", ""))[:14], 22 * s, pal["dim"])
+            c.text(W - lx, ty - 2 * s,
+                   "%.1fC" % tval if tval is not None else "--",
+                   26 * s, col, anchor="rt")
+            ty += 44 * s
 
     def page_calendar(self, cal, pal, ascii_mode=False):
         s = self.s

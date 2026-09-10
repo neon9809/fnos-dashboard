@@ -1,9 +1,9 @@
 {
   "id": "volc-plan",
   "name": "火山方舟 Plan 用量",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "neon",
-  "desc": "火山方舟 Coding Plan / Agent Plan 用量监控：5 小时 / 本周 / 本月额度窗口与重置时间（OpenAPI 签名查询）",
+  "desc": "火山方舟 Coding Plan / Agent Plan 用量监控：5 小时 / 本周 / 本月额度窗口与重置时间（OpenAPI 签名查询），支持同凭据双套餐并行查询",
   "entry": "mod.py",
   "config_schema": [
     {
@@ -13,7 +13,8 @@
       "default": "coding",
       "options": [
         { "value": "coding", "label": "Coding Plan" },
-        { "value": "agent", "label": "Agent Plan" }
+        { "value": "agent", "label": "Agent Plan" },
+        { "value": "both", "label": "双套餐（同凭据同时查询）" }
       ]
     },
     { "field": "access_key", "type": "text", "label": "AccessKey ID", "default": "" },

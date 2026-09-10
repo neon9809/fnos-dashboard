@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -99,43 +100,19 @@ def _pct(used, quota):
     return round(used / quota * 100, 1) if quota else 0.0
 
 
-def get_payload(config: dict) -> dict:
-    """返回火山方舟 Plan 用量页面数据。
-
-    config 字段（manifest.config_schema 声明）：
-      plan_type: "coding" | "agent"
-      access_key / secret_key: 火山引擎子账号 AK/SK
-      region: 默认 cn-beijing
-    """
-    plan = (config.get("plan_type") or "coding").strip().lower()
-    region = (config.get("region") or "cn-beijing").strip() or "cn-beijing"
-    ak = (config.get("access_key") or "").strip()
-    sk = (config.get("secret_key") or "").strip()
-    if not ak or not sk:
-        return {"title": "火山方舟 Plan", "error": "未配置 AK/SK"}
-    if plan not in ("coding", "agent"):
-        plan = "coding"
-
-    action = "GetCodingPlanUsage" if plan == "coding" else "GetAgentPlanAFPUsage"
-    try:
-        data = _call(ak, sk, action, region)
-    except Exception as e:
-        return {"title": "火山方舟 %s" % ("Coding Plan" if plan == "coding"
-                                          else "Agent Plan"),
-                "error": str(e)[:80]}
-    result = data.get("Result") or {}
-
+def _section(result, plan, prefix):
+    """单个套餐 → (lines, bars, resets)，prefix 用于双套餐区分。"""
     lines, bars, resets = [], [], []
     if plan == "coding":
         for q in result.get("QuotaUsage") or []:
             level = str(q.get("Level") or "").lower()
             name = LEVEL_NAMES.get(level, level or "额度")
             pct = round(float(q.get("Percent") or 0), 1)
-            lines.append([name, "%.1f%%" % pct])
-            bars.append([name, pct])
+            lines.append([prefix + name, "%.1f%%" % pct])
+            bars.append([prefix + name, pct])
             r = _fmt_reset((q.get("ResetTimestamp") or 0) * 1000)
             if r:
-                resets.append("%s %s" % (name.split("窗口")[0], r))
+                resets.append("%s %s" % ((prefix + name).split("窗口")[0], r))
     else:
         for key, name in AFP_NAMES:
             item = result.get(key)
@@ -144,17 +121,84 @@ def get_payload(config: dict) -> dict:
             quota = float(item.get("Quota") or 0)
             used = float(item.get("Used") or 0)
             pct = _pct(used, quota)
-            lines.append([name, "%.1f / %.0f（%.1f%%）" % (used, quota, pct)])
-            bars.append([name, pct])
+            lines.append([prefix + name,
+                          "%.1f / %.0f（%.1f%%）" % (used, quota, pct)])
+            bars.append([prefix + name, pct])
             r = _fmt_reset(item.get("ResetTime"))
             if r:
-                resets.append("%s %s" % (name.split("窗口")[0], r))
+                resets.append("%s %s" % ((prefix + name).split("窗口")[0], r))
+    return lines, bars, resets
 
-    plan_name = "Coding Plan" if plan == "coding" else "Agent Plan"
+
+def _collect(ak, sk, region, plan):
+    """查询单个套餐 → (Result, err)。"""
+    action = "GetCodingPlanUsage" if plan == "coding" else "GetAgentPlanAFPUsage"
+    try:
+        return _call(ak, sk, action, region).get("Result") or {}, ""
+    except Exception as e:
+        return {}, str(e)[:60]
+
+
+def get_payload(config: dict) -> dict:
+    """返回火山方舟 Plan 用量页面数据。
+
+    config 字段（manifest.config_schema 声明）：
+      plan_type: "coding" | "agent" | "both"（双套餐同凭据并行查询）
+      access_key / secret_key: 火山引擎子账号 AK/SK
+      region: 默认 cn-beijing
+    """
+    plan = (config.get("plan_type") or "coding").strip().lower()
+    if plan not in ("coding", "agent", "both"):
+        plan = "coding"
+    region = (config.get("region") or "cn-beijing").strip() or "cn-beijing"
+    ak = (config.get("access_key") or "").strip()
+    sk = (config.get("secret_key") or "").strip()
+    if not ak or not sk:
+        return {"title": "火山方舟 Plan", "error": "未配置 AK/SK"}
+
+    plans = ("coding", "agent") if plan == "both" else (plan,)
+    if len(plans) > 1:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda p: _collect(ak, sk, region, p),
+                                    plans))
+    else:
+        results = [_collect(ak, sk, region, plans[0])]
+
+    lines, bars, resets, errs = [], [], [], []
+    per_plan = {}
+    labels = {"coding": "Coding", "agent": "Agent"}
+    for (res, err), p in zip(results, plans):
+        if err:
+            errs.append("%s:%s" % (labels[p], err))
+            continue
+        prefix = labels[p] + " " if plan == "both" else ""
+        ln, br, rs = _section(res, p, prefix)
+        lines.extend(ln)
+        per_plan[p] = br
+        resets.extend(rs)
+
+    if not lines:
+        return {"title": "火山方舟 Plan",
+                "error": (" · ".join(errs) or "无额度数据")[:80]}
+
+    if plan == "both":
+        # 双套餐各取 5h 窗口与本月两条进度条（渲染上限 4 条）
+        bars = (per_plan.get("coding") or [])[::2] + \
+               (per_plan.get("agent") or [])[::2]
+        bars = (bars + per_plan.get("coding", []) + per_plan.get("agent", []))[:4]
+        if errs:
+            lines.append(["部分失败", (" / ".join(errs))[:22]])
+    else:
+        bars = per_plan.get(plans[0], [])
+
+    if plan == "both":
+        title = "火山方舟 Plan"
+    else:
+        title = "火山方舟 %s Plan" % labels[plans[0]]
     return {
-        "title": "火山方舟 %s" % plan_name,
+        "title": title,
         "subtitle": "更新 %s" % time.strftime("%H:%M"),
-        "lines": lines,
+        "lines": lines[:8],
         "bars": bars[:4],
-        "text": ("最近重置 " + " · ".join(resets[:2])) if resets else "",
+        "text": ("最近重置 " + " · ".join(resets[:2]))[:46] if resets else "",
     }

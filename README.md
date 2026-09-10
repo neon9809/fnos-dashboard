@@ -42,7 +42,7 @@
 
 | 模组 | 说明 |
 |------|------|
-| volc-plan | 火山方舟 Plan 用量：Coding Plan / Agent Plan 的 5h/周/月额度窗口与重置时间（OpenAPI V4 签名，AK/SK 配置） |
+| volc-plan | 火山方舟 Plan 用量：Coding Plan / Agent Plan 的 5h/周/月额度窗口与重置时间（OpenAPI V4 签名，AK/SK 配置），支持同凭据「双套餐」并行查询 |
 | glm-plan | 智谱 GLM Coding Plan 用量：5h/周 token 窗口、MCP·联网工具月额度、套餐档位（bigmodel.cn / 国际站 z.ai，API Key 配置） |
 
 开发者工具与规范见 [`neon-dash/`](neon-dash/):
