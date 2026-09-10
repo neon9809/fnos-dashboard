@@ -1320,6 +1320,13 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._send_json(404, {"ok": False, "error": "Not Found"})
             return
+        # 网关文档 URL 无尾斜杠时相对路径会锚定到 /app/ 层级，注入 base 修正
+        if ctype.startswith("text/html") and \
+                getattr(self.server, "gateway", False) and self.gateway_prefix:
+            body = body.replace(
+                b"<head>",
+                b"<head>\n<base href=\"" + self.gateway_prefix.encode()
+                + b"/\">", 1)
         self._send(200, body, ctype=ctype)
 
     # ---- framebuffer 信息与预览 ----
