@@ -9,6 +9,7 @@
 
 import calendar as _calendar
 import datetime as _dt
+import gzip
 import importlib.util
 import io
 import json
@@ -17,6 +18,7 @@ import re
 import shutil
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -78,8 +80,21 @@ class ModuleCache:
         req = urllib.request.Request(
             url, headers=headers or {"User-Agent": "fnos-dashboard/1.0"})
         req.add_header("Accept-Encoding", "identity")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8", "replace"))
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+        except urllib.error.HTTPError as e:
+            # 带上服务端错误体（如和风 {"error":{"code":...}}），便于定位
+            body = ""
+            try:
+                body = e.read().decode("utf-8", "replace")[:120]
+            except Exception:
+                pass
+            raise RuntimeError("HTTP %s %s" % (e.code, body)) from e
+        # 和风专属 API 域名会无视 identity 强制返回 gzip
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        return json.loads(raw.decode("utf-8", "replace"))
 
     def weather(self, cfg):
         """cfg 为全量配置；30 分钟缓存，配置变更立即刷新。"""
@@ -159,8 +174,11 @@ class ModuleCache:
         loc = (cfg.get("weather_location") or "").strip()
         if loc:
             if self.COORD_RE.fullmatch(re.sub(r"\s+", "", loc)):
-                lng, lat = [s.strip() for s in loc.split(",")]
-                return "%s,%s" % (lng, lat), loc
+                a, b = [s.strip() for s in loc.split(",")]
+                # 和风 v7 约定 经度,纬度；用户常填 纬度,经度——第二段>90 不可能是纬度，自动交换
+                if abs(float(b)) > 90 >= abs(float(a)):
+                    a, b = b, a
+                return "%s,%s" % (a, b), cfg.get("weather_city") or loc
             if loc.isdigit():
                 return loc, cfg.get("weather_city") or loc
         city = cfg.get("weather_city") or "北京"
